@@ -1,4 +1,6 @@
 import { Home, Search, Heart, User, Settings, PenSquare } from "lucide-react"
+import { SettingsMenu } from "@/components/settings/SettingsMenu"
+import { useState, useEffect, useRef } from "react"
 
 export type PageType = "feed" | "search" | "notifications" | "profile"
 
@@ -19,6 +21,19 @@ const NAV_BOTTOM: { page: PageType; icon: typeof Home; label: string }[] = [
 ]
 
 export function Sidebar({ activePage, onNavigate, onOpenPost }: SidebarProps) {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false)
+      }
+    }
+    if (settingsOpen) document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [settingsOpen])
+
   const renderNavItem = ({ page, icon: Icon, label }: typeof NAV_TOP[number]) => {
     const isActive = activePage === page
     return (
@@ -67,10 +82,15 @@ export function Sidebar({ activePage, onNavigate, onOpenPost }: SidebarProps) {
       </div>
 
       {/* Settings at the bottom */}
-      <div className="flex flex-col items-center mb-4">
-        <button className="p-3 text-muted-foreground hover:text-foreground transition-all rounded-xl hover:bg-muted">
+      <div className="flex flex-col items-center mb-4 relative" ref={settingsRef}>
+        <button
+          onClick={() => setSettingsOpen(v => !v)}
+          className="p-3 text-muted-foreground hover:text-foreground transition-all rounded-xl hover:bg-muted"
+        >
           <Settings size={28} strokeWidth={2.5} />
         </button>
+
+        <SettingsMenu isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>
     </div>
   )
