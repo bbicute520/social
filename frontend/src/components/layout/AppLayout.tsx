@@ -7,7 +7,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, sidebar }: AppLayoutProps) {
   return (
-    <div className="h-screen w-full grid grid-cols-[80px_1fr] bg-slate-100/50 text-foreground overflow-hidden">
+    <div className="h-screen w-full grid grid-cols-[80px_1fr] bg-background text-foreground overflow-hidden">
       {/* Sidebar cố định bên trái */}
       <aside className="h-full">
         {sidebar}

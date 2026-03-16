@@ -27,7 +27,7 @@ interface FeedPageProps {
   activeFilter?: string
 }
 
-export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
+export function FeedPage({ onOpenPost }: FeedPageProps) {
   return (
     <div className="flex flex-col h-full w-full">
       {/* Inline Create Post Trigger */}
