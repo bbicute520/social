@@ -65,11 +65,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
           {/* Divider */}
           <div className="border-t border-border" />
-
-          {/* Additional settings can be added here */}
-          <div className="text-center text-xs text-muted-foreground pt-2">
-            Threads Clone · Version 1.0.0
-          </div>
         </div>
       </DialogContent>
     </Dialog>
