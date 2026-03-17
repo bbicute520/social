@@ -1,13 +1,33 @@
+export interface ProfileLink {
+  id: string
+  label: string
+  url: string
+  sortOrder: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UserCount {
+  followers: number
+  following: number
+  posts: number
+}
+
 export interface User {
   id: string
   username: string
-  displayName: string
+  displayName: string | null
   imageUrl: string | null
+  avatar?: string | null
   bio: string | null
-  followerCount: number
-  followingCount: number
-  isVerified: boolean
-  createdAt: string
+  links?: ProfileLink[]
+  profileLinks?: ProfileLink[]
+  _count?: UserCount
+  followerCount?: number
+  followingCount?: number
+  isVerified?: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface Post {
@@ -20,6 +40,20 @@ export interface Post {
   updatedAt: string
   likeCount: number
   commentCount: number
+  isLikedByMe?: boolean
+  isRepostedByMe?: boolean
+}
+
+export interface RepostPost extends Post {
+  repostedAt: string
+  repostId: string
+}
+
+export interface CommentPostPreview {
+  id: string
+  content: string
+  authorId: string
+  createdAt: string
 }
 
 export interface Comment {
@@ -32,6 +66,7 @@ export interface Comment {
   createdAt: string
   updatedAt: string
   likeCount: number
+  post?: CommentPostPreview
 }
 
 export interface Notification {

@@ -58,13 +58,6 @@ export function Sidebar({ activePage, onNavigate, onOpenPost }: SidebarProps) {
 
   return (
     <div className="h-full w-full flex flex-col items-center py-4 bg-transparent">
-      {/* Logo */}
-      <button className="p-2 text-foreground mb-6 hover:scale-105 transition-transform">
-        <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-        </svg>
-      </button>
-
       {/* Nav icons centered — split by compose button */}
       <div className="flex-1 flex flex-col items-center justify-center gap-2">
         {NAV_TOP.map(renderNavItem)}

@@ -1,5 +1,6 @@
 import { Moon, Sun, Globe, Bell, Lock, LogOut, ChevronRight } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
+import { useClerk } from "@clerk/clerk-react"
 import { useState } from "react"
 
 interface SettingsMenuProps {
@@ -9,14 +10,18 @@ interface SettingsMenuProps {
 
 export function SettingsMenu({ isOpen, onClose }: SettingsMenuProps) {
   const { theme, setTheme } = useTheme()
+  const { signOut } = useClerk()
   const [showThemeSubmenu, setShowThemeSubmenu] = useState(false)
 
   if (!isOpen) return null
 
-  const handleLogout = () => {
-    // TODO: Implement logout logic
-    console.log("Đăng xuất")
-    onClose()
+  const handleLogout = async () => {
+    try {
+      onClose()
+      await signOut({ redirectUrl: '/' })
+    } catch (error) {
+      console.error('Sign out error:', error)
+    }
   }
 
   const handleThemeChange = (newTheme: "light" | "dark") => {

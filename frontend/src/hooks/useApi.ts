@@ -8,19 +8,21 @@ export function useApi() {
 
   const apiFetch = useCallback(async (path: string, options?: RequestInit) => {
     const token = await getToken()
-    
+
     // Create headers
     const headers = new Headers(options?.headers)
-    
+
     if (token) {
       headers.set("Authorization", `Bearer ${token}`)
     }
-    
+
     if (!headers.has("Content-Type") && !(options?.body instanceof FormData)) {
       headers.set("Content-Type", "application/json")
     }
 
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const url = `${BASE_URL}${path}`
+
+    const res = await fetch(url, {
       ...options,
       headers,
     })

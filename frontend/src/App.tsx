@@ -7,9 +7,12 @@ import { SearchPage } from "./components/search/SearchPage"
 import { NotificationsPage } from "./components/notifications/NotificationsPage"
 import { ProfilePage } from "./components/profile/ProfilePage"
 import { CreatePostModal } from "./components/post/CreatePostModal"
+import { DraftsModal } from "./components/post/DraftsModal"
 import { Sidebar, type PageType } from "./components/layout/Sidebar"
 import { useState, useRef, useEffect } from "react"
 import { Home, Search, Heart, User, PlusCircle, PenSquare } from "lucide-react"
+import { useLocalStorage } from "@/hooks/useLocalStorage"
+import { motion, AnimatePresence } from "framer-motion"
 
 // ─── Filter definitions ───────────────────────────────────────────────────────
 const FEED_FILTERS: FilterOption[] = [
@@ -69,25 +72,41 @@ function PageContent({ pageType, onOpenPost, activeFilter }: {
 // ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
   const [activePage,      setActivePage]      = useState<PageType>("feed")
-  const [columns,         setColumns]         = useState<Column[]>(INITIAL_COLUMNS)
+  const [columns,         setColumns]         = useLocalStorage<Column[]>('feed-columns', INITIAL_COLUMNS)
   const [pickerOpen,      setPickerOpen]      = useState(false)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false)
+  const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false)
+  const [selectedDraft, setSelectedDraft] = useState<any>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   const handleNavigate = (page: PageType) => {
     setActivePage(page)
     const meta = PAGE_META[page]
-    setColumns(prev => {
-      const updated = [...prev]
-      updated[0] = {
-        ...updated[0],
+
+    if (page !== 'feed') {
+      // Reset về single column cho tất cả trang không phải feed
+      setColumns([{
+        id: 'main',
         pageType: page,
         title: meta.title,
         filterOptions: meta.filterOptions,
         activeFilter: meta.defaultFilter,
-      }
-      return updated
-    })
+      }])
+    } else {
+      // Khi quay về feed, columns sẽ tự restore từ localStorage qua useLocalStorage
+      // Nếu cần update main column
+      setColumns(prev => {
+        const updated = [...prev]
+        updated[0] = {
+          ...updated[0],
+          pageType: page,
+          title: meta.title,
+          filterOptions: meta.filterOptions,
+          activeFilter: meta.defaultFilter,
+        }
+        return updated
+      })
+    }
   }
 
   const addColumn = (pageType: PageType) => {
@@ -124,6 +143,9 @@ function App() {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [pickerOpen])
 
+  // Xác định chế độ single column: không phải feed HOẶC feed với 1 cột
+  const isSingleColumnMode = activePage !== 'feed' || columns.length === 1
+
   return (
     <>
       <SignedOut>
@@ -152,38 +174,51 @@ function App() {
               onOpenPost={() => setIsPostModalOpen(true)}
             />
           }
+          isSingleColumnMode={isSingleColumnMode}
         >
-          {columns.map((col, idx) => (
-            <SubPageContainer
-              key={col.id}
-              title={col.title}
-              columnCount={columns.length}
-              isDeletable={idx !== 0}
-              onDelete={() => removeColumn(col.id)}
-              filterOptions={col.filterOptions}
-              activeFilter={col.activeFilter}
-              onFilterChange={key => updateFilter(col.id, key)}
-            >
-              <PageContent
-                pageType={col.pageType}
-                onOpenPost={() => setIsPostModalOpen(true)}
-                activeFilter={col.activeFilter}
-              />
-            </SubPageContainer>
-          ))}
+          <AnimatePresence mode="popLayout">
+            {columns.map((col, idx) => (
+              <motion.div
+                key={col.id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <SubPageContainer
+                  title={col.title}
+                  columnCount={columns.length}
+                  isDeletable={idx !== 0}
+                  onDelete={() => removeColumn(col.id)}
+                  filterOptions={col.filterOptions}
+                  activeFilter={col.activeFilter}
+                  onFilterChange={key => updateFilter(col.id, key)}
+                  disableInternalScroll={isSingleColumnMode}
+                >
+                  <PageContent
+                    pageType={col.pageType}
+                    onOpenPost={() => setIsPostModalOpen(true)}
+                    activeFilter={col.activeFilter}
+                  />
+                </SubPageContainer>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </AppLayout>
 
-          {/* Floating Add Page Button */}
-          <div className="flex items-start pt-[28px] pl-[30px] shrink-0 relative" ref={pickerRef}>
+        {/* Floating Add Page Button - Fixed góc trên phải, chỉ hiện ở trang Feed */}
+        {activePage === 'feed' && (
+          <div className="fixed top-6 right-6 z-50" ref={pickerRef}>
             <button
               onClick={() => setPickerOpen(v => !v)}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-card border-2 border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 shadow-sm transition-all hover:scale-105"
+              className="w-12 h-12 flex items-center justify-center rounded-2xl bg-card border-2 border-border text-foreground hover:bg-muted shadow-lg transition-all hover:scale-105"
               title="Thêm trang"
             >
-              <PlusCircle size={20} />
+              <PlusCircle size={22} />
             </button>
 
             {pickerOpen && (
-              <div className="absolute left-[30px] top-[52px] z-50 w-[190px] bg-popover border border-border rounded-2xl shadow-xl py-2 overflow-hidden">
+              <div className="absolute right-0 top-[calc(100%+8px)] w-[190px] bg-popover border border-border rounded-2xl shadow-xl py-2 overflow-hidden">
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 pb-1.5">
                   Thêm trang
                 </p>
@@ -203,12 +238,12 @@ function App() {
               </div>
             )}
           </div>
-        </AppLayout>
+        )}
 
         {/* Fixed FAB — bottom right */}
         <button
           onClick={() => setIsPostModalOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-5 h-11 bg-foreground text-background rounded-2xl font-semibold text-sm shadow-xl hover:opacity-90 active:scale-95 transition-all"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-5 h-11 bg-card text-foreground border-2 border-border rounded-2xl font-semibold text-sm shadow-xl hover:bg-muted active:scale-95 transition-all"
         >
           <PenSquare size={16} strokeWidth={2.5} />
           Đăng bài
@@ -216,7 +251,22 @@ function App() {
 
         <CreatePostModal
           isOpen={isPostModalOpen}
-          onClose={() => setIsPostModalOpen(false)}
+          onClose={() => {
+            setIsPostModalOpen(false)
+            setSelectedDraft(null)
+          }}
+          initialDraft={selectedDraft}
+          onOpenDrafts={() => setIsDraftsModalOpen(true)}
+        />
+
+        <DraftsModal
+          isOpen={isDraftsModalOpen}
+          onClose={() => setIsDraftsModalOpen(false)}
+          onSelectDraft={(draft) => {
+            setSelectedDraft(draft)
+            setIsDraftsModalOpen(false)
+            setIsPostModalOpen(true)
+          }}
         />
       </SignedIn>
     </>

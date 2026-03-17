@@ -17,6 +17,7 @@ interface SubPageContainerProps {
   filterOptions?: FilterOption[]
   activeFilter?: string
   onFilterChange?: (key: string) => void
+  disableInternalScroll?: boolean
 }
 
 export function SubPageContainer({
@@ -28,6 +29,7 @@ export function SubPageContainer({
   filterOptions,
   activeFilter,
   onFilterChange,
+  disableInternalScroll = false,
 }: SubPageContainerProps) {
   const [menuOpen,   setMenuOpen]   = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -49,7 +51,7 @@ export function SubPageContainer({
   }, [])
 
   return (
-    <div className={`h-full ${wClass} flex flex-col shrink-0 gap-3`}>
+    <div className={`${disableInternalScroll ? 'min-h-screen' : 'h-full'} ${wClass} flex flex-col shrink-0 gap-3`}>
       {/* Title row — outside the card */}
       <div className="flex items-center justify-center relative px-2 min-h-[28px]">
 
@@ -112,10 +114,18 @@ export function SubPageContainer({
       </div>
 
       {/* Card body */}
-      <div className="flex-1 flex flex-col border-2 border-border bg-card rounded-[32px] shadow-sm overflow-hidden relative transition-all duration-300">
-        <ScrollArea className="flex-1 w-full bg-card">
-          {children}
-        </ScrollArea>
+      <div className={`${disableInternalScroll ? 'flex-1 flex flex-col' : 'flex-1 flex flex-col'} border-2 border-border bg-card rounded-[32px] shadow-sm overflow-hidden relative transition-all duration-300`}>
+        {disableInternalScroll ? (
+          // Trang đơn: không scroll riêng, content tự expand
+          <div className="w-full h-full bg-card">
+            {children}
+          </div>
+        ) : (
+          // Đa cột: scroll riêng trong container
+          <ScrollArea className="flex-1 w-full bg-card">
+            {children}
+          </ScrollArea>
+        )}
       </div>
     </div>
   )

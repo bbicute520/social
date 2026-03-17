@@ -94,29 +94,32 @@ export function SearchPage() {
           </div>
         )}
 
-        {!isLoading && activeTab !== "trending" && usersToDisplay.map(user => (
-          <div
-            key={user.id}
-            className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/15 transition-colors"
-          >
-            <Avatar className="w-10 h-10 shrink-0">
-              <AvatarImage src={user.imageUrl || undefined} />
-              <AvatarFallback>{user.displayName?.[0] || user.username[0]}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold leading-tight truncate">{user.displayName || user.username}</p>
-              <p className="text-xs text-muted-foreground truncate">@{user.username} {user.followerCount > 0 ? `· ${user.followerCount} người theo dõi` : ""}</p>
-            </div>
-            <Button
-              size="sm"
-              variant={followed.has(user.id) ? "outline" : "default"}
-              onClick={() => toggleFollow(user.id)}
-              className="rounded-full text-xs h-8 px-4 shrink-0"
+        {!isLoading && activeTab !== "trending" && usersToDisplay.map(user => {
+          const followerCount = user.followerCount ?? 0
+          return (
+            <div
+              key={user.id}
+              className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/15 transition-colors"
             >
-              {followed.has(user.id) ? "Đang theo dõi" : "Theo dõi"}
-            </Button>
-          </div>
-        ))}
+              <Avatar className="w-10 h-10 shrink-0">
+                <AvatarImage src={user.imageUrl || undefined} />
+                <AvatarFallback>{user.displayName?.[0] || user.username[0]}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold leading-tight truncate">{user.displayName || user.username}</p>
+                <p className="text-xs text-muted-foreground truncate">@{user.username} {followerCount > 0 ? `· ${followerCount} người theo dõi` : ""}</p>
+              </div>
+              <Button
+                size="sm"
+                variant={followed.has(user.id) ? "outline" : "default"}
+                onClick={() => toggleFollow(user.id)}
+                className="rounded-full text-xs h-8 px-4 shrink-0"
+              >
+                {followed.has(user.id) ? "Đang theo dõi" : "Theo dõi"}
+              </Button>
+            </div>
+          )
+        })}
         
         {!isLoading && activeTab !== "trending" && usersToDisplay.length === 0 && (
           <div className="text-center py-10 text-muted-foreground text-sm">
