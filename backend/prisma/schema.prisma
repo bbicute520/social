@@ -16,7 +16,7 @@ enum NotificationType {
 model User {
   id                    String         @id
   email                 String         @unique
-  username              String?        @unique
+  username              String         @unique
   displayName           String?
   bio                   String?
   imageUrl              String?
@@ -25,10 +25,25 @@ model User {
   posts                 Post[]
   comments              Comment[]
   likes                 Like[]
+  reposts               Repost[]
   followers             Follow[]       @relation("followers")
   following             Follow[]       @relation("following")
+  profileLinks          ProfileLink[]
   notificationsReceived Notification[] @relation("notificationRecipient")
   notificationsTriggered Notification[] @relation("notificationActor")
+}
+
+model ProfileLink {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  url       String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sortOrder])
 }
 
 model Post {
@@ -43,10 +58,24 @@ model Post {
   author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments     Comment[]
   likes        Like[]         @relation("PostLikes")
+  reposts      Repost[]
   notifications Notification[]
 
   @@index([createdAt(sort: Desc)])
   @@index([authorId, createdAt(sort: Desc)])
+}
+
+model Repost {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([postId, createdAt(sort: Desc)])
 }
 
 model Comment {

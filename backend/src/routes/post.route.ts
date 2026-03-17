@@ -14,7 +14,10 @@ import {
   deletePost,
   getFeed,
   getPostsByUser,
+  getRepostsByUser,
   likePost,
+  repostPost,
+  unrepostPost,
   unlikePost,
   updatePost,
 } from "../services/post.service";
@@ -60,6 +63,20 @@ router.get(
   })
 );
 
+router.get(
+  "/user/:userId/reposts",
+  validate(userPostParamSchema),
+  asyncHandler(async (req, res) => {
+    const { cursor, limit } = getPagination({
+      cursor: req.query.cursor as string | undefined,
+      limit: req.query.limit as string | undefined,
+    });
+    const targetUserId = String(req.params.userId);
+    const data = await getRepostsByUser(targetUserId, cursor, limit);
+    res.json(data);
+  })
+);
+
 router.patch(
   "/:postId",
   validate(updatePostSchema),
@@ -100,6 +117,28 @@ router.delete(
     const userId = getAuthUserId(req);
     const postId = String(req.params.postId);
     const data = await unlikePost(userId, postId);
+    res.json(data);
+  })
+);
+
+router.post(
+  "/:postId/repost",
+  validate(postIdParamSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getAuthUserId(req);
+    const postId = String(req.params.postId);
+    const data = await repostPost(userId, postId);
+    res.json(data);
+  })
+);
+
+router.delete(
+  "/:postId/repost",
+  validate(postIdParamSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getAuthUserId(req);
+    const postId = String(req.params.postId);
+    const data = await unrepostPost(userId, postId);
     res.json(data);
   })
 );

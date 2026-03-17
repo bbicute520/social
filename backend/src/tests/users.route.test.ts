@@ -29,4 +29,40 @@ describe("Users routes", () => {
 
     expect(response.status).toBe(401);
   });
+
+  it("updates profile with avatar and links", async () => {
+    vi.spyOn(userService, "updateMyProfile").mockResolvedValueOnce({
+      id: "user_123",
+      username: "demo_user",
+      displayName: "Demo User",
+      avatar: "https://cdn.example.com/avatar.png",
+      links: [
+        {
+          id: "link_1",
+          label: "GitHub",
+          url: "https://github.com/demo",
+          sortOrder: 0,
+        },
+      ],
+    } as any);
+
+    const response = await request(app)
+      .patch("/api/users/me")
+      .set("x-test-user-id", "user_123")
+      .send({
+        username: "demo_user",
+        displayName: "Demo User",
+        avatar: "https://cdn.example.com/avatar.png",
+        links: [
+          {
+            label: "GitHub",
+            url: "https://github.com/demo",
+          },
+        ],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.username).toBe("demo_user");
+    expect(response.body.links).toHaveLength(1);
+  });
 });

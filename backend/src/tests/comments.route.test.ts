@@ -24,4 +24,18 @@ describe("Comments routes", () => {
     expect(response.status).toBe(201);
     expect(response.body.id).toBe("comment_1");
   });
+
+  it("returns comments by user", async () => {
+    vi.spyOn(commentService, "getCommentsByUser").mockResolvedValueOnce({
+      data: [{ id: "comment_2", content: "reply" }],
+      nextCursor: null,
+    } as any);
+
+    const response = await request(app)
+      .get("/api/comments/user/user_1?limit=10")
+      .set("x-test-user-id", "user_1");
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.data)).toBe(true);
+  });
 });
