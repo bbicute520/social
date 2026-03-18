@@ -89,6 +89,19 @@ export const openApiDocument = {
                   displayName: { type: "string" },
                   bio: { type: "string" },
                   imageUrl: { type: "string" },
+                  avatar: { type: "string" },
+                  links: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        label: { type: "string" },
+                        url: { type: "string" },
+                        sortOrder: { type: "integer" },
+                      },
+                      required: ["label", "url"],
+                    },
+                  },
                 },
               },
             },
@@ -191,6 +204,19 @@ export const openApiDocument = {
         responses: { 200: { description: "Posts page" } },
       },
     },
+    "/api/posts/user/{userId}/reposts": {
+      get: {
+        tags: ["Posts"],
+        summary: "Get reposts by user",
+        description: "Returns posts reposted by the user, newest first.",
+        parameters: [
+          { name: "userId", in: "path", required: true, schema: { type: "string" } },
+          { name: "cursor", in: "query", schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+        ],
+        responses: { 200: { description: "Reposts page" } },
+      },
+    },
     "/api/posts/{postId}": {
       patch: {
         tags: ["Posts"],
@@ -233,6 +259,20 @@ export const openApiDocument = {
         responses: { 200: { description: "Unliked" } },
       },
     },
+    "/api/posts/{postId}/repost": {
+      post: {
+        tags: ["Posts"],
+        summary: "Repost post",
+        parameters: [{ name: "postId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Reposted" }, 404: { description: "Not found" } },
+      },
+      delete: {
+        tags: ["Posts"],
+        summary: "Undo repost",
+        parameters: [{ name: "postId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Repost removed" } },
+      },
+    },
 
     "/api/comments/post/{postId}": {
       get: {
@@ -264,6 +304,18 @@ export const openApiDocument = {
           },
         },
         responses: { 201: { description: "Created" }, 404: { description: "Post not found" } },
+      },
+    },
+    "/api/comments/user/{userId}": {
+      get: {
+        tags: ["Comments"],
+        summary: "Get comments by user",
+        parameters: [
+          { name: "userId", in: "path", required: true, schema: { type: "string" } },
+          { name: "cursor", in: "query", schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+        ],
+        responses: { 200: { description: "Comments page" } },
       },
     },
     "/api/comments/{commentId}": {

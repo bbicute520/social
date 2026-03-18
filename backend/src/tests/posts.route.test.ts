@@ -38,4 +38,40 @@ describe("Posts routes", () => {
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body.data)).toBe(true);
   });
+
+  it("returns reposts page for user", async () => {
+    vi.spyOn(postService, "getRepostsByUser").mockResolvedValueOnce({
+      data: [{ id: "post_2" }],
+      nextCursor: null,
+    } as any);
+
+    const response = await request(app)
+      .get("/api/posts/user/user_1/reposts?limit=10")
+      .set("x-test-user-id", "user_1");
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.data)).toBe(true);
+  });
+
+  it("reposts a post", async () => {
+    vi.spyOn(postService, "repostPost").mockResolvedValueOnce({ success: true } as any);
+
+    const response = await request(app)
+      .post("/api/posts/post_1/repost")
+      .set("x-test-user-id", "user_1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+  });
+
+  it("undoes repost on a post", async () => {
+    vi.spyOn(postService, "unrepostPost").mockResolvedValueOnce({ success: true } as any);
+
+    const response = await request(app)
+      .delete("/api/posts/post_1/repost")
+      .set("x-test-user-id", "user_1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+  });
 });

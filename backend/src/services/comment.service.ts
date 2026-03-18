@@ -14,6 +14,43 @@ export const getCommentsByPost = async (postId: string, limit: number) => {
   });
 };
 
+export const getCommentsByUser = async (
+  userId: string,
+  cursor: string | undefined,
+  limit: number
+) => {
+  const comments = await prisma.comment.findMany({
+    where: { authorId: userId },
+    include: {
+      author: true,
+      post: {
+        select: {
+          id: true,
+          content: true,
+          authorId: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    ...(cursor
+      ? {
+          cursor: { id: cursor },
+          skip: 1,
+        }
+      : {}),
+  });
+
+  const hasMore = comments.length > limit;
+  const data = hasMore ? comments.slice(0, limit) : comments;
+
+  return {
+    data,
+    nextCursor: hasMore ? data[data.length - 1].id : null,
+  };
+};
+
 export const createComment = async (
   userId: string,
   postId: string,

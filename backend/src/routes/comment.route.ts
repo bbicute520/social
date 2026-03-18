@@ -7,11 +7,13 @@ import {
   commentIdParamSchema,
   createCommentSchema,
   postCommentsParamSchema,
+  userCommentsParamSchema,
 } from "../validators/comment.validator";
 import {
   createComment,
   deleteComment,
   getCommentsByPost,
+  getCommentsByUser,
   likeComment,
   unlikeComment,
 } from "../services/comment.service";
@@ -27,6 +29,20 @@ router.get(
     const { limit } = getPagination({ limit: req.query.limit as string | undefined });
     const postId = String(req.params.postId);
     const data = await getCommentsByPost(postId, limit);
+    res.json(data);
+  })
+);
+
+router.get(
+  "/user/:userId",
+  validate(userCommentsParamSchema),
+  asyncHandler(async (req, res) => {
+    const { cursor, limit } = getPagination({
+      cursor: req.query.cursor as string | undefined,
+      limit: req.query.limit as string | undefined,
+    });
+    const userId = String(req.params.userId);
+    const data = await getCommentsByUser(userId, cursor, limit);
     res.json(data);
   })
 );

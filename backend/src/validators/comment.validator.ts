@@ -26,3 +26,11 @@ export const postCommentsParamSchema = z.object({
   body: z.any().optional(),
   query: z.any().optional(),
 });
+
+export const userCommentsParamSchema = z.object({
+  params: z.object({
+    userId: z.string().min(1),
+  }),
+  body: z.any().optional(),
+  query: z.any().optional(),
+});

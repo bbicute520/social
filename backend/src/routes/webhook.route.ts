@@ -3,6 +3,7 @@ import { Webhook } from "svix";
 import bodyParser from "body-parser";
 import { WebhookEvent } from "@clerk/clerk-sdk-node";
 import { prisma } from "../lib/prisma";
+import { ensureAuthUser } from "../services/user.service";
 
 const router = express.Router();
 
@@ -44,57 +45,33 @@ router.post(
     const eventType = evt.type;
 
     if (eventType === "user.created") {
-      const { id, email_addresses, username, image_url, first_name, last_name } = evt.data;
+      const { id, email_addresses, username } = evt.data;
       const primaryEmail = email_addresses[0]?.email_address;
-      const displayName = [first_name, last_name].filter(Boolean).join(" ");
 
       try {
-        await prisma.user.upsert({
-          where: { id },
-          create: {
-            id,
-            email: primaryEmail || `${id}@clerk.local`,
-            username: username || null,
-            imageUrl: image_url || null,
-            displayName: displayName || null,
-          },
-          update: {
-            email: primaryEmail || `${id}@clerk.local`,
-            username: username || null,
-            imageUrl: image_url || null,
-            displayName: displayName || null,
-          },
+        await ensureAuthUser({
+          userId: id,
+          email: primaryEmail,
+          usernameHint: username,
         });
-        console.log(`User ${id} created in database`);
+        console.log(`User ${id} synced in database`);
       } catch (error) {
-        console.error("Error creating user in database:", error);
+        console.error("Error syncing user in database:", error);
         return res.status(500).json({ error: "Database error" });
       }
     }
 
     if (eventType === "user.updated") {
-      const { id, email_addresses, username, image_url, first_name, last_name } = evt.data;
+      const { id, email_addresses, username } = evt.data;
       const primaryEmail = email_addresses[0]?.email_address;
-      const displayName = [first_name, last_name].filter(Boolean).join(" ");
 
       try {
-        await prisma.user.upsert({
-          where: { id },
-          create: {
-            id,
-            email: primaryEmail || `${id}@clerk.local`,
-            username: username || null,
-            imageUrl: image_url || null,
-            displayName: displayName || null,
-          },
-          update: {
-            email: primaryEmail || `${id}@clerk.local`,
-            username: username || null,
-            imageUrl: image_url || null,
-            displayName: displayName || null,
-          },
+        await ensureAuthUser({
+          userId: id,
+          email: primaryEmail,
+          usernameHint: username,
         });
-        console.log(`User ${id} updated in database`);
+        console.log(`User ${id} auth metadata synced in database`);
       } catch (error) {
         console.error("Error updating user in database:", error);
       }

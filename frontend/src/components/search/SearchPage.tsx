@@ -5,24 +5,27 @@ import { Input } from "@/components/ui/input"
 import { Search, Loader2 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { useApi } from "@/hooks/useApi"
+import { useI18n } from "@/contexts/I18nContext"
+import { UserHoverPreview } from "@/components/profile/UserHoverPreview"
 import type { User } from "@/types/api"
 
 type SearchTab = "suggested" | "trending" | "people"
-
-const SEARCH_TABS: { key: SearchTab; label: string }[] = [
-  { key: "suggested", label: "Gợi ý" },
-  { key: "trending",  label: "Xu hướng" },
-  { key: "people",    label: "Tài khoản" },
-]
 
 // Mock data removed
 
 // Removed ALL_PEOPLE since it's now fetching from API
 
 export function SearchPage() {
+  const { t } = useI18n()
   const [query, setQuery]       = useState("")
   const [activeTab, setActiveTab] = useState<SearchTab>("suggested")
   const [followed, setFollowed] = useState<Set<string>>(new Set())
+
+  const SEARCH_TABS: { key: SearchTab; label: string }[] = [
+    { key: "suggested", label: t("search.tab.suggested") },
+    { key: "trending",  label: t("search.tab.trending") },
+    { key: "people",    label: t("search.tab.people") },
+  ]
 
   const { apiFetch } = useApi()
   const [debouncedQuery, setDebouncedQuery] = useState(query)
@@ -30,7 +33,11 @@ export function SearchPage() {
   const toggleFollow = (id: string) => {
     setFollowed(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
       return next
     })
   }
@@ -62,7 +69,7 @@ export function SearchPage() {
             <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Tìm kiếm người dùng, hashtag..."
+              placeholder={t("search.placeholder")}
               className="pl-9 rounded-full bg-muted/40 border-transparent focus-visible:border-border/60 focus-visible:ring-0 text-sm h-10"
             />
           </div>
@@ -94,38 +101,47 @@ export function SearchPage() {
           </div>
         )}
 
-        {!isLoading && activeTab !== "trending" && usersToDisplay.map(user => (
-          <div
-            key={user.id}
-            className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/15 transition-colors"
-          >
-            <Avatar className="w-10 h-10 shrink-0">
-              <AvatarImage src={user.imageUrl || undefined} />
-              <AvatarFallback>{user.displayName?.[0] || user.username[0]}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold leading-tight truncate">{user.displayName || user.username}</p>
-              <p className="text-xs text-muted-foreground truncate">@{user.username} {user.followerCount > 0 ? `· ${user.followerCount} người theo dõi` : ""}</p>
-            </div>
-            <Button
-              size="sm"
-              variant={followed.has(user.id) ? "outline" : "default"}
-              onClick={() => toggleFollow(user.id)}
-              className="rounded-full text-xs h-8 px-4 shrink-0"
+        {!isLoading && activeTab !== "trending" && usersToDisplay.map(user => {
+          const followerCount = user.followerCount ?? user._count?.followers ?? 0
+          return (
+            <div
+              key={user.id}
+              className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/15 transition-colors"
             >
-              {followed.has(user.id) ? "Đang theo dõi" : "Theo dõi"}
-            </Button>
-          </div>
-        ))}
+              <Avatar className="w-10 h-10 shrink-0">
+                <AvatarImage src={user.imageUrl || undefined} />
+                <AvatarFallback>{user.displayName?.[0] || user.username[0]}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <UserHoverPreview
+                  username={user.username}
+                  fallbackName={user.displayName || user.username}
+                  className="text-sm font-semibold leading-tight truncate hover:underline cursor-pointer"
+                />
+                <p className="text-xs text-muted-foreground truncate">
+                  @{user.username} {followerCount > 0 ? `· ${t("search.followers", { count: followerCount })}` : ""}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant={followed.has(user.id) ? "outline" : "default"}
+                onClick={() => toggleFollow(user.id)}
+                className="rounded-full text-xs h-8 px-4 shrink-0"
+              >
+                {followed.has(user.id) ? t("search.following") : t("search.follow")}
+              </Button>
+            </div>
+          )
+        })}
         
         {!isLoading && activeTab !== "trending" && usersToDisplay.length === 0 && (
           <div className="text-center py-10 text-muted-foreground text-sm">
-            Không tìm thấy người dùng nào
+            {t("search.noUsers")}
           </div>
         )}
 
         {activeTab === "trending" && (
-          <div className="text-center py-10 text-muted-foreground text-sm"> Tính năng Đang được phát triển </div>
+          <div className="text-center py-10 text-muted-foreground text-sm">{t("search.inProgress")}</div>
         )}
 
         <div className="h-16" />

@@ -3,6 +3,8 @@ import { pusherServer } from "../lib/pusher";
 import { ApiError } from "../middleware/error.middleware";
 import { isPrismaUniqueError } from "../utils/prisma-error";
 
+export type FeedFilter = "foryou" | "following";
+
 export const createPost = async (
   authorId: string,
   payload: { content: string; imageUrls?: string[] }
@@ -26,25 +28,51 @@ export const createPost = async (
   return post;
 };
 
-export const getFeed = async (userId: string, cursor: string | undefined, limit: number) => {
-  const following = await prisma.follow.findMany({
-    where: { followerId: userId },
-    select: { followingId: true },
-  });
+export const getFeed = async (
+  userId: string,
+  cursor: string | undefined,
+  limit: number,
+  filter: FeedFilter = "foryou"
+) => {
+  const following =
+    filter === "following"
+      ? await prisma.follow.findMany({
+          where: { followerId: userId },
+          select: { followingId: true },
+        })
+      : [];
 
-  const authorIds = [
-    userId,
-    ...following.map((row: { followingId: string }) => row.followingId),
-  ];
+  const authorIds =
+    filter === "following"
+      ? following.map((row: { followingId: string }) => row.followingId)
+      : undefined;
 
   const posts = await prisma.post.findMany({
-    where: {
-      authorId: {
-        in: authorIds,
-      },
-    },
+    where: authorIds
+      ? {
+          authorId: {
+            in: authorIds,
+          },
+        }
+      : {}, // No filter = all posts
     include: {
       author: true,
+      likes: {
+        where: {
+          userId,
+        },
+        select: {
+          id: true,
+        },
+      },
+      reposts: {
+        where: {
+          userId,
+        },
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: limit + 1,
@@ -57,7 +85,71 @@ export const getFeed = async (userId: string, cursor: string | undefined, limit:
   });
 
   const hasMore = posts.length > limit;
-  const data = hasMore ? posts.slice(0, limit) : posts;
+  const pagedPosts = hasMore ? posts.slice(0, limit) : posts;
+  const data = pagedPosts.map((post) => {
+    const { likes, reposts, ...rest } = post;
+
+    return {
+      ...rest,
+      isLikedByMe: likes.length > 0,
+      isRepostedByMe: reposts.length > 0,
+    };
+  });
+
+  return {
+    data,
+    nextCursor: hasMore ? pagedPosts[pagedPosts.length - 1].id : null,
+  };
+};
+
+export const getPostsByUser = async (
+  targetUserId: string,
+  viewerUserId: string,
+  cursor: string | undefined,
+  limit: number
+) => {
+  const posts = await prisma.post.findMany({
+    where: { authorId: targetUserId },
+    include: {
+      author: true,
+      likes: {
+        where: {
+          userId: viewerUserId,
+        },
+        select: {
+          id: true,
+        },
+      },
+      reposts: {
+        where: {
+          userId: viewerUserId,
+        },
+        select: {
+          id: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    ...(cursor
+      ? {
+          cursor: { id: cursor },
+          skip: 1,
+        }
+      : {}),
+  });
+
+  const hasMore = posts.length > limit;
+  const pagedPosts = hasMore ? posts.slice(0, limit) : posts;
+  const data = pagedPosts.map((post) => {
+    const { likes, reposts, ...rest } = post;
+
+    return {
+      ...rest,
+      isLikedByMe: likes.length > 0,
+      isRepostedByMe: reposts.length > 0,
+    };
+  });
 
   return {
     data,
@@ -65,10 +157,39 @@ export const getFeed = async (userId: string, cursor: string | undefined, limit:
   };
 };
 
-export const getPostsByUser = async (userId: string, cursor: string | undefined, limit: number) => {
-  const posts = await prisma.post.findMany({
-    where: { authorId: userId },
-    include: { author: true },
+export const getRepostsByUser = async (
+  targetUserId: string,
+  viewerUserId: string,
+  cursor: string | undefined,
+  limit: number
+) => {
+  const reposts = await prisma.repost.findMany({
+    where: {
+      userId: targetUserId,
+    },
+    include: {
+      post: {
+        include: {
+          author: true,
+          likes: {
+            where: {
+              userId: viewerUserId,
+            },
+            select: {
+              id: true,
+            },
+          },
+          reposts: {
+            where: {
+              userId: viewerUserId,
+            },
+            select: {
+              id: true,
+            },
+          },
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
     take: limit + 1,
     ...(cursor
@@ -79,13 +200,69 @@ export const getPostsByUser = async (userId: string, cursor: string | undefined,
       : {}),
   });
 
-  const hasMore = posts.length > limit;
-  const data = hasMore ? posts.slice(0, limit) : posts;
+  const hasMore = reposts.length > limit;
+  const sliced = hasMore ? reposts.slice(0, limit) : reposts;
+  const data = sliced.map((entry) => {
+    const { likes, reposts: postReposts, ...rest } = entry.post;
+
+    return {
+      ...rest,
+      isLikedByMe: likes.length > 0,
+      isRepostedByMe: postReposts.length > 0,
+      repostedAt: entry.createdAt,
+      repostId: entry.id,
+    };
+  });
 
   return {
     data,
-    nextCursor: hasMore ? data[data.length - 1].id : null,
+    nextCursor: hasMore ? sliced[sliced.length - 1].id : null,
   };
+};
+
+export const repostPost = async (userId: string, postId: string) => {
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { id: true },
+  });
+
+  if (!post) {
+    throw new ApiError(404, "Post not found");
+  }
+
+  try {
+    const repost = await prisma.repost.create({
+      data: {
+        userId,
+        postId,
+      },
+    });
+
+    return {
+      success: true,
+      repost,
+    };
+  } catch (error) {
+    if (isPrismaUniqueError(error)) {
+      return {
+        success: true,
+        alreadyReposted: true,
+      };
+    }
+
+    throw error;
+  }
+};
+
+export const unrepostPost = async (userId: string, postId: string) => {
+  await prisma.repost.deleteMany({
+    where: {
+      userId,
+      postId,
+    },
+  });
+
+  return { success: true };
 };
 
 export const updatePost = async (

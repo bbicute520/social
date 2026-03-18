@@ -12,9 +12,13 @@ import {
 import {
   createPost,
   deletePost,
+  type FeedFilter,
   getFeed,
   getPostsByUser,
+  getRepostsByUser,
   likePost,
+  repostPost,
+  unrepostPost,
   unlikePost,
   updatePost,
 } from "../services/post.service";
@@ -37,11 +41,15 @@ router.get(
   "/feed",
   asyncHandler(async (req, res) => {
     const userId = getAuthUserId(req);
+    const feedFilter: FeedFilter =
+      typeof req.query.filter === "string" && req.query.filter.toLowerCase() === "following"
+        ? "following"
+        : "foryou";
     const { cursor, limit } = getPagination({
       cursor: req.query.cursor as string | undefined,
       limit: req.query.limit as string | undefined,
     });
-    const data = await getFeed(userId, cursor, limit);
+    const data = await getFeed(userId, cursor, limit, feedFilter);
     res.json(data);
   })
 );
@@ -50,12 +58,28 @@ router.get(
   "/user/:userId",
   validate(userPostParamSchema),
   asyncHandler(async (req, res) => {
+    const viewerUserId = getAuthUserId(req);
     const { cursor, limit } = getPagination({
       cursor: req.query.cursor as string | undefined,
       limit: req.query.limit as string | undefined,
     });
     const targetUserId = String(req.params.userId);
-    const data = await getPostsByUser(targetUserId, cursor, limit);
+    const data = await getPostsByUser(targetUserId, viewerUserId, cursor, limit);
+    res.json(data);
+  })
+);
+
+router.get(
+  "/user/:userId/reposts",
+  validate(userPostParamSchema),
+  asyncHandler(async (req, res) => {
+    const viewerUserId = getAuthUserId(req);
+    const { cursor, limit } = getPagination({
+      cursor: req.query.cursor as string | undefined,
+      limit: req.query.limit as string | undefined,
+    });
+    const targetUserId = String(req.params.userId);
+    const data = await getRepostsByUser(targetUserId, viewerUserId, cursor, limit);
     res.json(data);
   })
 );
@@ -100,6 +124,28 @@ router.delete(
     const userId = getAuthUserId(req);
     const postId = String(req.params.postId);
     const data = await unlikePost(userId, postId);
+    res.json(data);
+  })
+);
+
+router.post(
+  "/:postId/repost",
+  validate(postIdParamSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getAuthUserId(req);
+    const postId = String(req.params.postId);
+    const data = await repostPost(userId, postId);
+    res.json(data);
+  })
+);
+
+router.delete(
+  "/:postId/repost",
+  validate(postIdParamSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getAuthUserId(req);
+    const postId = String(req.params.postId);
+    const data = await unrepostPost(userId, postId);
     res.json(data);
   })
 );
