@@ -3,14 +3,33 @@ import { pusherServer } from "../lib/pusher";
 import { ApiError } from "../middleware/error.middleware";
 import { isPrismaUniqueError } from "../utils/prisma-error";
 
-export const getCommentsByPost = async (postId: string, limit: number) => {
-  return prisma.comment.findMany({
+export const getCommentsByPost = async (
+  postId: string,
+  limit: number,
+  viewerUserId?: string
+) => {
+  const comments = await prisma.comment.findMany({
     where: { postId },
     include: {
       author: true,
+      likes: viewerUserId
+        ? {
+            where: { userId: viewerUserId },
+            select: { id: true },
+          }
+        : false,
     },
     orderBy: { createdAt: "desc" },
     take: limit,
+  });
+
+  return comments.map((comment: any) => {
+    const { likes, ...rest } = comment;
+
+    return {
+      ...rest,
+      isLikedByMe: Array.isArray(likes) ? likes.length > 0 : false,
+    };
   });
 };
 

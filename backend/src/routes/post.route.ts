@@ -14,6 +14,7 @@ import {
   deletePost,
   type FeedFilter,
   getFeed,
+  getPostById,
   getPostsByUser,
   getRepostsByUser,
   likePost,
@@ -65,6 +66,17 @@ router.get(
     });
     const targetUserId = String(req.params.userId);
     const data = await getPostsByUser(targetUserId, viewerUserId, cursor, limit);
+    res.json(data);
+  })
+);
+
+router.get(
+  "/:postId",
+  validate(postIdParamSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getAuthUserId(req);
+    const postId = String(req.params.postId);
+    const data = await getPostById(postId, userId);
     res.json(data);
   })
 );

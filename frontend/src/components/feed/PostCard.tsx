@@ -1,4 +1,4 @@
-import { Heart, MessageCircle, Repeat2, Send } from "lucide-react"
+import { Heart, MessageCircle, Repeat2, Send, Trash2 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { UserHoverPreview } from "@/components/profile/UserHoverPreview"
 import { useI18n } from "@/contexts/I18nContext"
@@ -27,6 +27,9 @@ interface PostCardProps {
   onToggleRepost?: () => void
   repostDisabled?: boolean
   showActions?: boolean
+  canDelete?: boolean
+  onDelete?: () => void
+  deleteDisabled?: boolean
 }
 
 export const PostCard = memo(function PostCard({
@@ -47,6 +50,9 @@ export const PostCard = memo(function PostCard({
   onToggleRepost,
   repostDisabled = false,
   showActions = true,
+  canDelete = false,
+  onDelete,
+  deleteDisabled = false,
 }: PostCardProps) {
   const { t } = useI18n()
 
@@ -104,7 +110,20 @@ export const PostCard = memo(function PostCard({
               </svg>
             )}
           </div>
-          <span className="text-muted-foreground text-[clamp(11px,2.6cqw,14px)]">{timestamp}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-[clamp(11px,2.6cqw,14px)]">{timestamp}</span>
+            {canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deleteDisabled}
+                className="text-muted-foreground transition-colors hover:text-red-600 disabled:opacity-50"
+                title={t("post.actions.delete")}
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         <p className="mt-1 text-[clamp(13px,3.2cqw,15px)] leading-snug whitespace-pre-wrap">{content}</p>

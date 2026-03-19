@@ -17,6 +17,7 @@ type UserHoverPreviewProps = {
   fallbackName: string
   className?: string
   children?: ReactNode
+  onNavigateProfile?: (username: string) => void
 }
 
 type CardPosition = {
@@ -34,6 +35,7 @@ export function UserHoverPreview({
   fallbackName,
   className,
   children,
+  onNavigateProfile,
 }: UserHoverPreviewProps) {
   const triggerRef = useRef<HTMLSpanElement>(null)
   const closeTimeoutRef = useRef<number | null>(null)
@@ -127,12 +129,28 @@ export function UserHoverPreview({
             return previous
           }
 
+          const previousFollowerCount = previous._count?.followers ?? previous.followerCount ?? 0
+          const previousFollowState = Boolean(previous.isFollowing)
+          const followerDelta = nextFollowState === previousFollowState ? 0 : nextFollowState ? 1 : -1
+          const nextFollowerCount = Math.max(0, previousFollowerCount + followerDelta)
+
           return {
             ...previous,
             isFollowing: nextFollowState,
+            followerCount: nextFollowerCount,
+            _count: previous._count
+              ? {
+                  ...previous._count,
+                  followers: nextFollowerCount,
+                }
+              : previous._count,
           }
         }
       )
+
+      queryClient.invalidateQueries({ queryKey: ["users", "followers"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["users", "following"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["search", "users"], refetchType: "inactive" })
     },
     onSettled: () => {
       setOptimisticFollow(null)
@@ -146,6 +164,23 @@ export function UserHoverPreview({
 
     followMutation.mutate(!isFollowing)
   }
+
+  const handleNavigateProfile = useCallback(() => {
+    if (!canLoadProfile) {
+      return
+    }
+
+    if (onNavigateProfile) {
+      onNavigateProfile(username)
+      return
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("app:open-profile", {
+        detail: { username },
+      })
+    )
+  }, [canLoadProfile, onNavigateProfile, username])
 
   const displayName = data?.displayName || fallbackName
   const baseFollowerCount = data?._count?.followers ?? data?.followerCount ?? 0
@@ -166,12 +201,17 @@ export function UserHoverPreview({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <Avatar className="h-11 w-11 border border-border">
+          <Avatar className="h-11 w-11 cursor-pointer border border-border" onClick={handleNavigateProfile}>
             <AvatarImage src={data?.avatar || data?.imageUrl || undefined} alt={displayName} />
             <AvatarFallback>{displayName[0] || "U"}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{displayName}</p>
+            <p
+              className="cursor-pointer truncate text-sm font-semibold hover:underline"
+              onClick={handleNavigateProfile}
+            >
+              {displayName}
+            </p>
             <p className="truncate text-xs text-muted-foreground">@{username}</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {followerCount.toLocaleString()} {t("profile.followers")}
@@ -183,7 +223,10 @@ export function UserHoverPreview({
           <Button
             size="sm"
             variant={isFollowing ? "outline" : "default"}
-            onClick={handleToggleFollow}
+            onClick={(event) => {
+              event.stopPropagation()
+              handleToggleFollow()
+            }}
             disabled={followMutation.isPending || !data?.id}
             className="h-8 rounded-full px-3 text-xs font-semibold"
           >
@@ -204,6 +247,7 @@ export function UserHoverPreview({
       className="inline-flex"
       onMouseEnter={openCard}
       onMouseLeave={closeCardSoon}
+      onClick={handleNavigateProfile}
       tabIndex={0}
     >
       <span className={className}>{children || fallbackName}</span>

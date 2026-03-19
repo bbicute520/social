@@ -47,7 +47,9 @@ export function NotificationsPage({ activeFilter = "all" }: NotificationsPagePro
       time: new Date(n.createdAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US"),
       isRead: n.isRead,
       category,
-      originalType: n.type
+      originalType: n.type,
+      postId: n.postId || null,
+      commentId: n.commentId || null,
     }
   })
 
@@ -74,6 +76,15 @@ export function NotificationsPage({ activeFilter = "all" }: NotificationsPagePro
           <div
             key={item.id}
             className="flex items-start gap-3 px-4 py-3.5 hover:bg-muted/15 transition-colors cursor-pointer"
+            onClick={() => {
+              if (item.postId) {
+                window.dispatchEvent(
+                  new CustomEvent("app:open-post", {
+                    detail: { postId: item.postId, commentId: item.commentId },
+                  })
+                )
+              }
+            }}
           >
             <div className="relative shrink-0">
               <Avatar className="w-10 h-10">
@@ -87,11 +98,13 @@ export function NotificationsPage({ activeFilter = "all" }: NotificationsPagePro
 
             <div className="flex-1 min-w-0">
               <p className="text-sm leading-snug">
-                <UserHoverPreview
-                  username={item.username}
-                  fallbackName={item.name}
-                  className="font-semibold hover:underline cursor-pointer"
-                />{" "}
+                <span onClick={(event) => event.stopPropagation()}>
+                  <UserHoverPreview
+                    username={item.username}
+                    fallbackName={item.name}
+                    className="font-semibold hover:underline cursor-pointer"
+                  />
+                </span>{" "}
                 <span className="text-muted-foreground">{item.content}</span>
               </p>
               <p className="text-xs text-muted-foreground/60 mt-0.5">{item.time}</p>

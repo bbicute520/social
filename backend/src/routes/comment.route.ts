@@ -26,9 +26,10 @@ router.get(
   "/post/:postId",
   validate(postCommentsParamSchema),
   asyncHandler(async (req, res) => {
+    const userId = getAuthUserId(req);
     const { limit } = getPagination({ limit: req.query.limit as string | undefined });
     const postId = String(req.params.postId);
-    const data = await getCommentsByPost(postId, limit);
+    const data = await getCommentsByPost(postId, limit, userId);
     res.json(data);
   })
 );

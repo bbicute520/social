@@ -2,20 +2,19 @@ import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 
 async function main() {
-  // Clear existing data
-  await prisma.notification.deleteMany();
-  await prisma.repost.deleteMany();
-  await prisma.like.deleteMany();
-  await prisma.comment.deleteMany();
-  await prisma.follow.deleteMany();
-  await prisma.post.deleteMany();
-  await prisma.user.deleteMany({ where: { id: { startsWith: "seed_" } } });
-
-  console.log("Creating users...");
+  console.log("Creating or updating users...");
 
   // Create users
-  const minh = await prisma.user.create({
-    data: {
+  const minh = await prisma.user.upsert({
+    where: { id: "seed_minh" },
+    update: {
+      email: "minh@example.com",
+      username: "minhdev",
+      displayName: "Minh Nguyễn",
+      bio: "Full-stack Developer 💻 | Love coding and coffee ☕",
+      imageUrl: "https://ui-avatars.com/api/?name=Minh+Nguyen&background=0D8ABC&color=fff",
+    },
+    create: {
       id: "seed_minh",
       email: "minh@example.com",
       username: "minhdev",
@@ -25,8 +24,16 @@ async function main() {
     },
   });
 
-  const lan = await prisma.user.create({
-    data: {
+  const lan = await prisma.user.upsert({
+    where: { id: "seed_lan" },
+    update: {
+      email: "lan@example.com",
+      username: "landesigner",
+      displayName: "Lan Phạm",
+      bio: "UI/UX Designer ✨ | Making the web beautiful",
+      imageUrl: "https://ui-avatars.com/api/?name=Lan+Pham&background=F97316&color=fff",
+    },
+    create: {
       id: "seed_lan",
       email: "lan@example.com",
       username: "landesigner",
@@ -36,8 +43,16 @@ async function main() {
     },
   });
 
-  const hung = await prisma.user.create({
-    data: {
+  const hung = await prisma.user.upsert({
+    where: { id: "seed_hung" },
+    update: {
+      email: "hung@example.com",
+      username: "hungtech",
+      displayName: "Hùng Trần",
+      bio: "Tech enthusiast 🚀 | AI & ML lover",
+      imageUrl: "https://ui-avatars.com/api/?name=Hung+Tran&background=8B5CF6&color=fff",
+    },
+    create: {
       id: "seed_hung",
       email: "hung@example.com",
       username: "hungtech",
@@ -47,8 +62,16 @@ async function main() {
     },
   });
 
-  const thao = await prisma.user.create({
-    data: {
+  const thao = await prisma.user.upsert({
+    where: { id: "seed_thao" },
+    update: {
+      email: "thao@example.com",
+      username: "thaonguyen",
+      displayName: "Thảo Nguyễn",
+      bio: "Product Manager | Building great products 📱",
+      imageUrl: "https://ui-avatars.com/api/?name=Thao+Nguyen&background=EC4899&color=fff",
+    },
+    create: {
       id: "seed_thao",
       email: "thao@example.com",
       username: "thaonguyen",
@@ -58,8 +81,16 @@ async function main() {
     },
   });
 
-  const khanh = await prisma.user.create({
-    data: {
+  const khanh = await prisma.user.upsert({
+    where: { id: "seed_khanh" },
+    update: {
+      email: "khanh@example.com",
+      username: "khanhcoder",
+      displayName: "Khánh Lê",
+      bio: "Backend Developer | Node.js & Go enthusiast 🔥",
+      imageUrl: "https://ui-avatars.com/api/?name=Khanh+Le&background=10B981&color=fff",
+    },
+    create: {
       id: "seed_khanh",
       email: "khanh@example.com",
       username: "khanhcoder",
@@ -83,6 +114,7 @@ async function main() {
       { followerId: thao.id, followingId: lan.id },
       { followerId: khanh.id, followingId: minh.id },
     ],
+    skipDuplicates: true,
   });
 
   console.log("Creating posts...");

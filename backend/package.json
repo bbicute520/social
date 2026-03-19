@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:backfill-usernames": "ts-node prisma/backfill-usernames.ts",
     "db:seed": "ts-node prisma/seed.ts",
+    "db:seed:large": "ts-node prisma/seed-large.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
