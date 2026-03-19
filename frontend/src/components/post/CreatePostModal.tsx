@@ -7,6 +7,7 @@ import { useApi } from "@/hooks/useApi"
 import { useI18n } from "@/contexts/I18nContext"
 import { formatRelativeTime } from "@/lib/time"
 import { useUser, useAuth } from "@clerk/clerk-react"
+import { useCurrentUserProfile } from "@/hooks/useCurrentUserProfile"
 import { Loader2, Image as ImageIcon, X, Globe, Users, ChevronDown, Check, FileText, Trash2, Clock, ArrowLeft } from "lucide-react"
 import { useUploadThing } from "@/lib/uploadthing"
 
@@ -76,6 +77,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const { apiFetch } = useApi()
   const queryClient = useQueryClient()
   const { user } = useUser()
+  const { data: me } = useCurrentUserProfile()
   const { getToken } = useAuth()
 
   const { startUpload, isUploading } = useUploadThing("imageUploader", {
@@ -361,7 +363,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
             <DialogTitle className="text-center font-bold text-[17px]">
               {viewMode === 'compose' ? t("composer.title") : `${t("composer.drafts")} (${drafts.length})`}
             </DialogTitle>
-            <DialogDescription className="sr-only">Create a new post or view drafts</DialogDescription>
+            <DialogDescription className="sr-only">{t("composer.dialogDescription")}</DialogDescription>
 
             {/* Drafts button in top-left corner / Back button when in drafts view */}
             {viewMode === 'compose' ? (
@@ -405,15 +407,15 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
             <div className="p-6 flex gap-3">
               <div className="flex flex-col items-center">
                 <Avatar className="w-10 h-10 border-2 border-border">
-                  <AvatarImage src={user?.imageUrl} />
-                  <AvatarFallback>{user?.firstName?.[0] || 'U'}</AvatarFallback>
+                  <AvatarImage src={me?.avatar || me?.imageUrl || user?.imageUrl} />
+                  <AvatarFallback>{(me?.displayName || me?.username || user?.firstName || 'U')[0]}</AvatarFallback>
                 </Avatar>
                 <div className="w-[2px] bg-border flex-1 mt-2 mb-1 rounded-full min-h-[20px]"></div>
               </div>
 
               <div className="flex-1 flex flex-col pt-1 gap-3">
                 <div>
-                  <span className="font-semibold text-[15px]">{user?.fullName || user?.username || "You"}</span>
+                  <span className="font-semibold text-[15px]">{me?.displayName || me?.username || user?.fullName || user?.username || t("composer.you")}</span>
                   <textarea
                     ref={textareaRef}
                     className="mt-2 w-full bg-transparent resize-none outline-none text-[15px] placeholder:text-muted-foreground max-h-[300px] overflow-y-auto"
@@ -556,7 +558,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                           className="flex-1 text-left"
                         >
                           <p className="text-[15px] line-clamp-3 mb-2">
-                            {draft.content || <span className="text-muted-foreground italic">{language === "vi" ? "Ban nhap trong" : "Empty draft"}</span>}
+                            {draft.content || <span className="text-muted-foreground italic">{t("composer.emptyDraftContent")}</span>}
                           </p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock size={12} />
@@ -566,7 +568,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
                         <button
                           onClick={() => deleteDraft(draft.id)}
                           className="p-2 h-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                          title={language === "vi" ? "Xoa ban nhap" : "Delete draft"}
+                          title={t("composer.deleteDraft")}
                         >
                           <Trash2 size={16} />
                         </button>

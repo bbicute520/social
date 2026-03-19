@@ -69,7 +69,7 @@ export const PostCard = memo(function PostCard({
         return
       }
 
-      window.prompt("Copy this link", shareUrl)
+      window.prompt(t("post.actions.copyLinkPrompt"), shareUrl)
     } catch (error) {
       console.error("Share failed", error)
     }

@@ -41,12 +41,6 @@ type UpdateProfilePayload = {
   }>
 }
 
-const TABS: { key: ProfileTab; label: string }[] = [
-  { key: "posts",   label: "Bài viết" },
-  { key: "replies", label: "Trả lời" },
-  { key: "reposts", label: "Bài đăng lại" },
-]
-
 const USERNAME_REGEX = /^[a-zA-Z0-9_.]+$/
 
 const PROFILE_EDIT_LAYOUT = {
@@ -76,7 +70,10 @@ const getDisplayName = (user: User | undefined) => {
   return user.displayName || user.username || "User"
 }
 
-const normalizeEditableLinks = (links: EditableLink[]) => {
+const normalizeEditableLinks = (
+  links: EditableLink[],
+  t: (key: string, params?: Record<string, string | number>) => string
+) => {
   const result: Array<{ label: string; url: string; sortOrder: number }> = []
 
   for (let index = 0; index < links.length; index++) {
@@ -90,7 +87,7 @@ const normalizeEditableLinks = (links: EditableLink[]) => {
 
     if (!label || !rawUrl) {
       return {
-        error: "Mỗi link cần đủ nhãn và URL.",
+        error: t("profile.errors.linkRequireBoth"),
         links: [] as Array<{ label: string; url: string; sortOrder: number }>,
       }
     }
@@ -101,7 +98,7 @@ const normalizeEditableLinks = (links: EditableLink[]) => {
       new URL(finalUrl)
     } catch {
       return {
-        error: `URL không hợp lệ: ${rawUrl}`,
+        error: t("profile.errors.linkInvalidUrl", { url: rawUrl }),
         links: [] as Array<{ label: string; url: string; sortOrder: number }>,
       }
     }
@@ -173,6 +170,15 @@ export function ProfilePage() {
     enabled: Boolean(me?.id && activeTab === "reposts"),
   })
 
+  const tabs = useMemo<{ key: ProfileTab; label: string }[]>(
+    () => [
+      { key: "posts", label: t("profile.tab.posts") },
+      { key: "replies", label: t("profile.tab.replies") },
+      { key: "reposts", label: t("profile.tab.reposts") },
+    ],
+    [t]
+  )
+
   const updateProfileMutation = useMutation({
     mutationFn: (payload: UpdateProfilePayload) =>
       apiFetch("/api/users/me", {
@@ -182,12 +188,16 @@ export function ProfilePage() {
     onSuccess: (updated: User) => {
       queryClient.setQueryData(["users", "me"], updated)
       queryClient.invalidateQueries({ queryKey: ["users", "me"] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
+      queryClient.invalidateQueries({ queryKey: ["users", "preview"] })
+      queryClient.invalidateQueries({ queryKey: ["posts"] })
+      queryClient.invalidateQueries({ queryKey: ["comments"] })
+      queryClient.invalidateQueries({ queryKey: ["notifications"] })
+      queryClient.invalidateQueries({ queryKey: ["search"] })
       setIsEditOpen(false)
       setFormError(null)
     },
     onError: (mutationError) => {
-      const message = mutationError instanceof Error ? mutationError.message : "Cập nhật thất bại"
+      const message = mutationError instanceof Error ? mutationError.message : t("profile.errors.updateFailed")
       setFormError(message)
     },
   })
@@ -301,12 +311,12 @@ export function ProfilePage() {
     }
 
     if (!file.type.startsWith("image/")) {
-      setFormError("Vui lòng chọn file ảnh hợp lệ.")
+      setFormError(t("profile.errors.invalidImageFile"))
       return
     }
 
     if (file.size > 4 * 1024 * 1024) {
-      setFormError("Ảnh đại diện tối đa 4MB.")
+      setFormError(t("profile.errors.avatarTooLarge"))
       return
     }
 
@@ -318,13 +328,13 @@ export function ProfilePage() {
       const uploadedUrl = uploadedFile?.ufsUrl || uploadedFile?.url
 
       if (!uploadedUrl) {
-        setFormError("Upload ảnh thất bại. Vui lòng thử lại.")
+        setFormError(t("profile.errors.avatarUploadFailed"))
         return
       }
 
       setAvatar(uploadedUrl)
     } catch (uploadError) {
-      setFormError(uploadError instanceof Error ? uploadError.message : "Upload ảnh thất bại.")
+      setFormError(uploadError instanceof Error ? uploadError.message : t("profile.errors.avatarUploadFailed"))
     }
   }
 
@@ -382,30 +392,30 @@ export function ProfilePage() {
 
   const onSubmitProfile = () => {
     if (isAvatarUploading) {
-      setFormError("Ảnh đại diện đang tải lên, vui lòng chờ hoàn tất.")
+      setFormError(t("profile.errors.avatarUploadingInProgress"))
       return
     }
 
     const normalizedUsername = username.trim().toLowerCase()
 
     if (!normalizedUsername) {
-      setFormError("Username là bắt buộc.")
+      setFormError(t("profile.errors.usernameRequired"))
       return
     }
 
     if (normalizedUsername.length < 3 || normalizedUsername.length > 32 || !USERNAME_REGEX.test(normalizedUsername)) {
-      setFormError("Username cần 3-32 ký tự và chỉ gồm chữ, số, dấu chấm hoặc gạch dưới.")
+      setFormError(t("profile.errors.usernameInvalid"))
       return
     }
 
-    const normalizedLinks = normalizeEditableLinks(links)
+    const normalizedLinks = normalizeEditableLinks(links, t)
     if (normalizedLinks.error) {
       setFormError(normalizedLinks.error)
       return
     }
 
     if (normalizedLinks.links.length > 10) {
-      setFormError("Tối đa 10 link kết nối.")
+      setFormError(t("profile.errors.tooManyLinks"))
       return
     }
 
@@ -414,7 +424,7 @@ export function ProfilePage() {
       try {
         new URL(trimmedAvatar)
       } catch {
-        setFormError("Ảnh đại diện không hợp lệ. Vui lòng upload lại.")
+        setFormError(t("profile.errors.avatarInvalid"))
         return
       }
     }
@@ -432,7 +442,7 @@ export function ProfilePage() {
   if (isLoading) {
     return (
       <div className="flex flex-col w-full p-8">
-        <p className="text-sm text-muted-foreground">Đang tải trang cá nhân...</p>
+        <p className="text-sm text-muted-foreground">{t("profile.loadingPage")}</p>
       </div>
     )
   }
@@ -440,9 +450,9 @@ export function ProfilePage() {
   if (error || !me) {
     return (
       <div className="flex flex-col w-full p-8">
-        <p className="text-sm text-red-600 font-semibold">Không thể tải trang cá nhân.</p>
+        <p className="text-sm text-red-600 font-semibold">{t("profile.loadError")}</p>
         <p className="text-sm text-muted-foreground mt-1">
-          {error instanceof Error ? error.message : "Vui lòng thử lại sau."}
+          {error instanceof Error ? error.message : t("profile.loadErrorTryLater")}
         </p>
       </div>
     )
@@ -466,7 +476,7 @@ export function ProfilePage() {
 
         {showUsernameHint && (
           <div className="text-xs text-amber-700 bg-amber-100 px-3 py-2 rounded-lg mb-3">
-            Username này đang ở dạng mặc định. Bạn có thể đổi trong phần Chỉnh sửa trang cá nhân.
+            {t("profile.usernameHint")}
           </div>
         )}
 
@@ -512,13 +522,13 @@ export function ProfilePage() {
           onClick={openEditDialog}
         >
           <Pencil size={14} />
-          Chỉnh sửa trang cá nhân
+          {t("profile.edit")}
         </Button>
       </div>
 
       {/* Tabs — sticky */}
       <div className="sticky top-0 z-10 flex bg-card/90 backdrop-blur-sm border-b border-border/50">
-        {TABS.map(tab => (
+        {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -536,11 +546,11 @@ export function ProfilePage() {
       {/* Tab Content */}
       <div className="flex flex-col">
         {activeTab === "posts" && isPostsLoading && (
-          <div className="px-5 py-8 text-sm text-muted-foreground">Đang tải bài viết...</div>
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("profile.posts.loading")}</div>
         )}
 
         {activeTab === "posts" && !isPostsLoading && posts.length === 0 && (
-          <div className="px-5 py-8 text-sm text-muted-foreground">Bạn chưa có bài viết nào.</div>
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("profile.posts.empty")}</div>
         )}
 
         {activeTab === "posts" && posts.map((post) => {
@@ -554,7 +564,7 @@ export function ProfilePage() {
               key={post.id}
               id={post.id}
               author={{
-                name: post.author.displayName || post.author.username || "Anonymous",
+                name: post.author.displayName || post.author.username || t("common.anonymous"),
                 username: post.author.username || "unknown",
                 avatar: post.author.avatar || post.author.imageUrl || `https://ui-avatars.com/api/?name=${post.author.username || "User"}`,
                 isVerified: post.author.isVerified,
@@ -578,11 +588,11 @@ export function ProfilePage() {
         })}
 
         {activeTab === "replies" && isRepliesLoading && (
-          <div className="px-5 py-8 text-sm text-muted-foreground">Đang tải trả lời...</div>
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("profile.replies.loading")}</div>
         )}
 
         {activeTab === "replies" && !isRepliesLoading && replies.length === 0 && (
-          <div className="px-5 py-8 text-sm text-muted-foreground">Bạn chưa có trả lời nào.</div>
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("profile.replies.empty")}</div>
         )}
 
         {activeTab === "replies" && replies.map((reply) => (
@@ -590,7 +600,7 @@ export function ProfilePage() {
             <PostCard
               id={reply.id}
               author={{
-                name: reply.author.displayName || reply.author.username || "Anonymous",
+                name: reply.author.displayName || reply.author.username || t("common.anonymous"),
                 username: reply.author.username || "unknown",
                 avatar: reply.author.avatar || reply.author.imageUrl || `https://ui-avatars.com/api/?name=${reply.author.username || "User"}`,
                 isVerified: reply.author.isVerified,
@@ -604,18 +614,18 @@ export function ProfilePage() {
             />
             {reply.post?.content && (
               <p className="px-16 pb-3 text-xs text-muted-foreground line-clamp-1">
-                Trả lời bài viết: {reply.post.content}
+                {t("profile.replies.targetPost", { content: reply.post.content })}
               </p>
             )}
           </div>
         ))}
 
         {activeTab === "reposts" && isRepostsLoading && (
-          <div className="px-5 py-8 text-sm text-muted-foreground">Đang tải bài đăng lại...</div>
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("profile.reposts.loading")}</div>
         )}
 
         {activeTab === "reposts" && !isRepostsLoading && reposts.length === 0 && (
-          <div className="px-5 py-8 text-sm text-muted-foreground">Bạn chưa có bài đăng lại nào.</div>
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("profile.reposts.empty")}</div>
         )}
 
         {activeTab === "reposts" && reposts.map((repost) => {
@@ -627,12 +637,12 @@ export function ProfilePage() {
           return (
             <div key={repost.repostId}>
               <p className="px-6 pt-3 pb-1 text-xs text-muted-foreground">
-                Đăng lại lúc {formatRelativeTime(repost.repostedAt, language, t)}
+                {t("profile.reposts.repostedAt", { time: formatRelativeTime(repost.repostedAt, language, t) })}
               </p>
               <PostCard
                 id={repost.id}
                 author={{
-                  name: repost.author.displayName || repost.author.username || "Anonymous",
+                  name: repost.author.displayName || repost.author.username || t("common.anonymous"),
                   username: repost.author.username || "unknown",
                   avatar: repost.author.avatar || repost.author.imageUrl || `https://ui-avatars.com/api/?name=${repost.author.username || "User"}`,
                   isVerified: repost.author.isVerified,
@@ -690,40 +700,40 @@ export function ProfilePage() {
         style={PROFILE_EDIT_DIALOG_STYLE}
       >
         <DialogHeader className="border-b border-border/50 px-6 py-4">
-          <DialogTitle>Chỉnh sửa trang cá nhân</DialogTitle>
+          <DialogTitle>{t("profile.editDialog.title")}</DialogTitle>
           <DialogDescription>
-            Cập nhật thông tin hồ sơ công khai của bạn.
+            {t("profile.editDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto px-6 py-5" style={PROFILE_EDIT_BODY_STYLE}>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Username *</label>
+            <label className="text-sm font-medium">{t("profile.form.usernameLabel")}</label>
             <Input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               placeholder="username"
               maxLength={32}
             />
-            <p className="text-xs text-muted-foreground">3-32 ký tự, chỉ chữ, số, dấu chấm, gạch dưới.</p>
+            <p className="text-xs text-muted-foreground">{t("profile.form.usernameHint")}</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Display Name</label>
+            <label className="text-sm font-medium">{t("profile.form.displayNameLabel")}</label>
             <Input
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Tên hiển thị"
+              placeholder={t("profile.form.displayNamePlaceholder")}
               maxLength={60}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Bio</label>
+            <label className="text-sm font-medium">{t("profile.form.bioLabel")}</label>
             <textarea
               value={bio}
               onChange={(event) => setBio(event.target.value)}
-              placeholder="Giới thiệu ngắn..."
+              placeholder={t("profile.form.bioPlaceholder")}
               maxLength={300}
               rows={4}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -731,7 +741,7 @@ export function ProfilePage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Ảnh đại diện</label>
+            <label className="text-sm font-medium">{t("profile.form.avatarLabel")}</label>
             <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-3">
               <Avatar className="h-14 w-14 border border-border">
                 <AvatarImage
@@ -741,7 +751,7 @@ export function ProfilePage() {
               </Avatar>
 
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Upload ảnh JPG, PNG, WEBP tối đa 4MB.</p>
+                <p className="text-xs text-muted-foreground">{t("profile.form.avatarHint")}</p>
 
                 <input
                   ref={avatarInputRef}
@@ -761,7 +771,7 @@ export function ProfilePage() {
                     disabled={isAvatarUploading}
                   >
                     {isAvatarUploading ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
-                    {isAvatarUploading ? "Đang tải ảnh..." : "Tải ảnh đại diện"}
+                    {isAvatarUploading ? t("profile.form.avatarUploading") : t("profile.form.avatarUpload")}
                   </Button>
 
                   {avatar.trim() && (
@@ -772,7 +782,7 @@ export function ProfilePage() {
                       onClick={() => setAvatar("")}
                       disabled={isAvatarUploading}
                     >
-                      Gỡ ảnh
+                      {t("profile.form.avatarRemove")}
                     </Button>
                   )}
                 </div>
@@ -782,7 +792,7 @@ export function ProfilePage() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Link kết nối</label>
+              <label className="text-sm font-medium">{t("profile.form.linksLabel")}</label>
               <Button
                 type="button"
                 variant="outline"
@@ -791,12 +801,12 @@ export function ProfilePage() {
                 disabled={links.length >= 10}
               >
                 <Plus size={14} />
-                Thêm link
+                {t("profile.form.linksAdd")}
               </Button>
             </div>
 
             {links.length === 0 && (
-              <p className="text-xs text-muted-foreground">Chưa có link nào. Bạn có thể thêm tối đa 10 link.</p>
+              <p className="text-xs text-muted-foreground">{t("profile.form.linksEmpty")}</p>
             )}
 
             <div className="space-y-2">
@@ -805,13 +815,13 @@ export function ProfilePage() {
                   <Input
                     value={item.label}
                     onChange={(event) => onChangeLink(item.id, "label", event.target.value)}
-                    placeholder="Nhãn (GitHub, LinkedIn...)"
+                    placeholder={t("profile.form.linkLabelPlaceholder")}
                     maxLength={40}
                   />
                   <Input
                     value={item.url}
                     onChange={(event) => onChangeLink(item.id, "url", event.target.value)}
-                    placeholder="URL"
+                    placeholder={t("profile.form.linkUrlPlaceholder")}
                     maxLength={2048}
                   />
                   <Button
@@ -819,7 +829,7 @@ export function ProfilePage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => onRemoveLink(item.id)}
-                    aria-label="Xóa link"
+                    aria-label={t("profile.form.linkRemoveAria")}
                   >
                     <Trash2 size={16} />
                   </Button>
@@ -837,14 +847,14 @@ export function ProfilePage() {
 
         <DialogFooter className="border-t border-border/50 px-6 py-4">
           <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
-            Hủy
+            {t("profile.form.cancel")}
           </Button>
           <Button
             type="button"
             onClick={onSubmitProfile}
             disabled={updateProfileMutation.isPending || isAvatarUploading}
           >
-            {isAvatarUploading ? "Đang tải ảnh..." : updateProfileMutation.isPending ? "Đang lưu..." : "Lưu thay đổi"}
+            {isAvatarUploading ? t("profile.form.avatarUploading") : updateProfileMutation.isPending ? t("profile.form.saving") : t("profile.form.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

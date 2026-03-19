@@ -1,10 +1,10 @@
 import { useMemo, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Loader2, MessageSquareMore } from "lucide-react"
-import { useUser } from "@clerk/clerk-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useApi } from "@/hooks/useApi"
+import { useCurrentUserProfile } from "@/hooks/useCurrentUserProfile"
 import { useI18n } from "@/contexts/I18nContext"
 import { formatRelativeTime } from "@/lib/time"
 import type { Comment as FeedComment, Post } from "@/types/api"
@@ -57,7 +57,7 @@ export function CommentThreadDialog({
 }: CommentThreadDialogProps) {
   const { apiFetch } = useApi()
   const { language, t } = useI18n()
-  const { user } = useUser()
+  const { data: me } = useCurrentUserProfile()
   const [visibleLimit, setVisibleLimit] = useState(30)
   const safeLimit = Math.min(COMMENT_LIMIT_MAX, Math.max(COMMENT_LIMIT_MIN, visibleLimit))
 
@@ -132,7 +132,7 @@ export function CommentThreadDialog({
               {orderedComments.map((comment) => (
                 <div key={comment.id} className="flex gap-2.5">
                   <Avatar className="h-8 w-8 border border-border">
-                    <AvatarImage src={comment.author.imageUrl || undefined} />
+                    <AvatarImage src={comment.author.avatar || comment.author.imageUrl || undefined} />
                     <AvatarFallback>
                       {(comment.author.displayName || comment.author.username || "U")[0]}
                     </AvatarFallback>
@@ -170,8 +170,8 @@ export function CommentThreadDialog({
         <div className="border-t border-border/50 px-5 py-4">
           <div className="flex items-center gap-2">
             <Avatar className="h-9 w-9 border border-border">
-              <AvatarImage src={user?.imageUrl || undefined} />
-              <AvatarFallback>{user?.firstName?.[0] || "U"}</AvatarFallback>
+              <AvatarImage src={me?.avatar || me?.imageUrl || undefined} />
+              <AvatarFallback>{(me?.displayName || me?.username || "U")[0]}</AvatarFallback>
             </Avatar>
             <input
               value={draft}

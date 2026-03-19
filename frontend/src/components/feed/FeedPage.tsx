@@ -9,6 +9,7 @@ import { useState } from "react"
 import { useI18n } from "@/contexts/I18nContext"
 import { formatRelativeTime } from "@/lib/time"
 import { CommentThreadDialog } from "./CommentThreadDialog"
+import { useCurrentUserProfile } from "@/hooks/useCurrentUserProfile"
 
 interface FeedPageProps {
   onOpenPost: () => void
@@ -19,6 +20,7 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
   const { language, t } = useI18n()
   const { apiFetch } = useApi()
   const { user } = useUser()
+  const { data: me } = useCurrentUserProfile()
   const queryClient = useQueryClient()
   const [activeCommentPost, setActiveCommentPost] = useState<Post | null>(null)
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
@@ -119,8 +121,8 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
         className="flex items-center gap-4 border-b border-border/50 bg-gradient-to-r from-muted/35 via-card to-card px-6 py-4 cursor-pointer hover:from-muted/45 transition-colors"
       >
         <Avatar className="w-10 h-10 border-2 border-border">
-          <AvatarImage src={user?.imageUrl} />
-          <AvatarFallback>{user?.firstName?.[0] || 'U'}</AvatarFallback>
+          <AvatarImage src={me?.avatar || me?.imageUrl || user?.imageUrl} />
+          <AvatarFallback>{(me?.displayName || me?.username || user?.firstName || 'U')[0]}</AvatarFallback>
         </Avatar>
         <div className="flex-1 text-muted-foreground text-[15px]">
           {t("feed.startThread")}
@@ -141,7 +143,7 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
         {error && (
           <div className="text-center py-10 px-6">
             <p className="text-red-600 font-semibold mb-2">{t("feed.loadPostsError")}</p>
-            <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : 'Unknown error'}</p>
+            <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : t("common.unknownError")}</p>
           </div>
         )}
 
@@ -160,9 +162,9 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
               <PostCard
                 id={post.id}
                 author={{
-                  name: post.author.displayName || post.author.username || 'Anonymous',
+                  name: post.author.displayName || post.author.username || t("common.anonymous"),
                   username: post.author.username || 'unknown',
-                  avatar: post.author.imageUrl || `https://ui-avatars.com/api/?name=${post.author.username || 'User'}`,
+                  avatar: post.author.avatar || post.author.imageUrl || `https://ui-avatars.com/api/?name=${post.author.username || 'User'}`,
                   isVerified: post.author.isVerified
                 }}
                 content={post.content}

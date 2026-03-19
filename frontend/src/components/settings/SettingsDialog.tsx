@@ -7,6 +7,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { useTheme } from "@/contexts/ThemeContext"
+import { useI18n } from "@/contexts/I18nContext"
 import { useClerk, useUser } from "@clerk/clerk-react"
 import { Button } from "@/components/ui/button"
 
@@ -17,6 +18,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { theme, toggleTheme } = useTheme()
+  const { t } = useI18n()
   const { signOut } = useClerk()
   const { user } = useUser()
 
@@ -33,9 +35,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Cài đặt</DialogTitle>
+          <DialogTitle>{t("settings.title")}</DialogTitle>
           <DialogDescription>
-            Tùy chỉnh giao diện và trải nghiệm của bạn
+            {t("settings.dialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -43,9 +45,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {/* Dark Mode Toggle */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <h4 className="text-sm font-medium">Giao diện</h4>
+              <h4 className="text-sm font-medium">{t("settings.theme")}</h4>
               <p className="text-sm text-muted-foreground">
-                Chuyển đổi chế độ sáng/tối
+                {t("settings.theme.description")}
               </p>
             </div>
 
@@ -82,9 +84,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {/* Account Section */}
           <div className="space-y-4">
             <div className="space-y-0.5">
-              <h4 className="text-sm font-medium">Tài khoản</h4>
+              <h4 className="text-sm font-medium">{t("settings.account")}</h4>
               <p className="text-sm text-muted-foreground">
-                Quản lý tài khoản của bạn
+                {t("settings.account.description")}
               </p>
             </div>
 
@@ -96,7 +98,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {user.fullName || user.username || "User"}
+                    {user.fullName || user.username || t("common.user")}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
                     {user.primaryEmailAddress?.emailAddress}
@@ -112,7 +114,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               className="w-full"
             >
               <LogOut className="w-4 h-4 mr-2" />
-              Đăng xuất
+              {t("settings.logout")}
             </Button>
           </div>
         </div>

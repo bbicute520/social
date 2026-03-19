@@ -40,8 +40,8 @@ export function NotificationsPage({ activeFilter = "all" }: NotificationsPagePro
     
     return {
       id: n.id,
-      avatar: n.actor?.imageUrl || "",
-      name: n.actor?.displayName || n.actor?.username || (language === "vi" ? "An danh" : "Anonymous"),
+      avatar: n.actor?.avatar || n.actor?.imageUrl || "",
+      name: n.actor?.displayName || n.actor?.username || t("common.anonymous"),
       username: n.actor?.username || "unknown",
       content,
       time: new Date(n.createdAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US"),
