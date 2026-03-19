@@ -277,7 +277,7 @@ function App() {
       <SignedOut>
         <div className="min-h-screen bg-slate-50 text-foreground flex flex-col items-center justify-center gap-6">
           <div className="flex flex-col items-center gap-2">
-            <h1 className="text-4xl font-bold mb-4">Threads Clone</h1>
+            <h1 className="text-4xl font-bold mb-4">Paper</h1>
             <p className="text-muted-foreground mb-4">{t("auth.signInPrompt")}</p>
             <div className="flex gap-4">
               <SignInButton mode="modal">
