@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type CSSProperties } from "react"
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -8,16 +8,13 @@ import { useI18n } from "@/contexts/I18nContext"
 import { formatRelativeTime } from "@/lib/time"
 import { useUser, useAuth } from "@clerk/clerk-react"
 import { useCurrentUserProfile } from "@/hooks/useCurrentUserProfile"
-import { Loader2, Image as ImageIcon, X, Globe, Users, ChevronDown, Check, FileText, Trash2, Clock, ArrowLeft } from "lucide-react"
+import { Loader2, Image as ImageIcon, X, FileText, Trash2, Clock, ArrowLeft } from "lucide-react"
 import { useUploadThing } from "@/lib/uploadthing"
-
-type ReplyPermission = 'everyone' | 'followers'
 
 interface Draft {
   id: string
   content: string
   images: string[] // Base64 encoded
-  replyPermission: ReplyPermission
   timestamp: number
 }
 
@@ -58,21 +55,13 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [content, setContent] = useState("")
   const [images, setImages] = useState<File[]>([])
-  const [replyPermission, setReplyPermission] = useState<ReplyPermission>('everyone')
-  const [showReplyMenu, setShowReplyMenu] = useState(false)
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
   const [composerError, setComposerError] = useState<string | null>(null)
 
-  const replyOptions = {
-    everyone: { label: t("composer.reply.everyone"), icon: Globe },
-    followers: { label: t("composer.reply.followers"), icon: Users },
-  } as const
-
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  const replyMenuRef = useRef<HTMLDivElement>(null)
 
   const { apiFetch } = useApi()
   const queryClient = useQueryClient()
@@ -117,7 +106,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
   const selectDraft = (draft: Draft) => {
     setContent(draft.content)
-    setReplyPermission(draft.replyPermission)
     setImages([])
     setCurrentDraftId(draft.id)
     setHasDraft(true)
@@ -155,7 +143,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
       setContent("")
       setImages([])
-      setReplyPermission('everyone')
       setCurrentDraftId(null)
       setHasDraft(false)
       setComposerError(null)
@@ -177,20 +164,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
     }
   }, [content])
 
-  // Close reply menu when click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (replyMenuRef.current && !replyMenuRef.current.contains(e.target as Node)) {
-        setShowReplyMenu(false)
-      }
-    }
-    if (showReplyMenu) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showReplyMenu])
-
-  const handlePost = async () => {
+  const handlePost = useCallback(async () => {
     if (!content.trim() || createPostMutation.isPending || isUploading) return
 
     setComposerError(null)
@@ -220,7 +194,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
       console.error("Upload error:", error)
       setComposerError(error instanceof Error ? error.message : t("composer.imageUploadError"))
     }
-  }
+  }, [content, createPostMutation, images, isUploading, startUpload, t])
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -272,7 +246,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isOpen, content, images, createPostMutation, onClose, t, isUploading])
+  }, [isOpen, content, images, createPostMutation.isPending, onClose, handlePost, isUploading])
 
   const handleConfirmDiscard = () => {
     // If editing existing draft, delete it
@@ -291,7 +265,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
     setContent("")
     setImages([])
-    setReplyPermission('everyone')
     setCurrentDraftId(null)
     setHasDraft(false)
     setComposerError(null)
@@ -316,7 +289,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
       id: draftId,
       content,
       images: [], // For now, don't save images to localStorage (too large)
-      replyPermission,
       timestamp: Date.now(),
     }
 
@@ -335,7 +307,6 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
 
     setContent("")
     setImages([])
-    setReplyPermission('everyone')
     setCurrentDraftId(null)
     setHasDraft(false)
     setComposerError(null)
@@ -481,47 +452,7 @@ export function CreatePostModal({ isOpen, onClose }: CreatePostModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 flex justify-between items-center border-t border-border/50 bg-muted/5">
-            {/* Reply Permission Dropdown */}
-            <div className="relative" ref={replyMenuRef}>
-              <button
-                onClick={() => setShowReplyMenu(v => !v)}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {(() => {
-                  const Icon = replyOptions[replyPermission].icon
-                  return (
-                    <>
-                      <Icon size={16} />
-                      <span>{t("composer.replyCan", { label: replyOptions[replyPermission].label })}</span>
-                      <ChevronDown size={14} className={`transition-transform ${showReplyMenu ? 'rotate-180' : ''}`} />
-                    </>
-                  )
-                })()}
-              </button>
-
-              {showReplyMenu && (
-                <div className="absolute bottom-full left-0 mb-2 w-[220px] bg-popover border border-border rounded-xl shadow-xl py-1.5 overflow-hidden z-50">
-                  <p className="text-xs font-semibold text-muted-foreground px-3 py-2">{t("composer.replyWho")}</p>
-                  {Object.entries(replyOptions).map(([key, { label, icon: Icon }]) => (
-                    <button
-                      key={key}
-                      onClick={() => {
-                        setReplyPermission(key as ReplyPermission)
-                        setShowReplyMenu(false)
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Icon size={16} className="text-muted-foreground" />
-                        <span>{label}</span>
-                      </div>
-                      {replyPermission === key && <Check size={16} className="text-foreground" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="px-6 py-4 flex justify-end items-center border-t border-border/50 bg-muted/5">
 
             <Button
               onClick={handlePost}

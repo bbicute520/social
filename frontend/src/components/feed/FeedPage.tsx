@@ -1,11 +1,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { PostCard } from "./PostCard"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useApi } from "@/hooks/useApi"
 import type { PaginatedResponse, Post } from "@/types/api"
 import { Loader2 } from "lucide-react"
 import { useUser } from "@clerk/clerk-react"
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useI18n } from "@/contexts/I18nContext"
 import { formatRelativeTime } from "@/lib/time"
 import { CommentThreadDialog } from "./CommentThreadDialog"
@@ -16,6 +16,8 @@ interface FeedPageProps {
   activeFilter?: string
 }
 
+const FEED_PAGE_SIZE = 20
+
 export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
   const { language, t } = useI18n()
   const { apiFetch } = useApi()
@@ -24,12 +26,103 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
   const queryClient = useQueryClient()
   const [activeCommentPost, setActiveCommentPost] = useState<Post | null>(null)
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const feedFilter = activeFilter === "following" ? "following" : "foryou"
 
-  const { data, isLoading, error } = useQuery<PaginatedResponse<Post>>({
+  const patchPostAcrossCaches = useCallback(
+    (postId: string, updater: (post: Post) => Post) => {
+      queryClient.setQueriesData({ queryKey: ["posts"] }, (current) => {
+        if (!current || typeof current !== "object") {
+          return current
+        }
+
+        const patchPage = (page: PaginatedResponse<Post>) => {
+          if (!Array.isArray(page.data)) {
+            return { page, changed: false }
+          }
+
+          let changed = false
+          const nextData = page.data.map((post) => {
+            if (post.id !== postId) {
+              return post
+            }
+
+            changed = true
+            return updater(post)
+          })
+
+          return {
+            page: changed
+              ? {
+                  ...page,
+                  data: nextData,
+                }
+              : page,
+            changed,
+          }
+        }
+
+        const singlePage = current as PaginatedResponse<Post>
+        if (Array.isArray(singlePage.data)) {
+          const { page, changed } = patchPage(singlePage)
+          return changed ? page : current
+        }
+
+        const infinitePages = current as {
+          pages?: PaginatedResponse<Post>[]
+          pageParams?: unknown[]
+        }
+
+        if (!Array.isArray(infinitePages.pages)) {
+          return current
+        }
+
+        let changed = false
+        const nextPages = infinitePages.pages.map((page) => {
+          const patched = patchPage(page)
+          if (patched.changed) {
+            changed = true
+          }
+
+          return patched.page
+        })
+
+        return changed
+          ? {
+              ...infinitePages,
+              pages: nextPages,
+            }
+          : current
+      })
+    },
+    [queryClient]
+  )
+
+  const {
+    data,
+    isLoading,
+    error,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery<PaginatedResponse<Post>>({
     queryKey: ["posts", "feed", feedFilter],
-    queryFn: () => apiFetch(`/api/posts/feed?filter=${feedFilter}`),
-    placeholderData: (previousData) => previousData,
+    initialPageParam: undefined,
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        filter: feedFilter,
+        limit: String(FEED_PAGE_SIZE),
+      })
+
+      if (typeof pageParam === "string" && pageParam.length > 0) {
+        params.set("cursor", pageParam)
+      }
+
+      return apiFetch(`/api/posts/feed?${params.toString()}`)
+    },
+    getNextPageParam: (lastPage) => {
+      return lastPage.nextCursor || undefined
+    },
   })
 
   const likeMutation = useMutation({
@@ -39,9 +132,16 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
         method,
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "user", user?.id] })
+    onSuccess: (_response, payload) => {
+      const likeDelta = payload.isLiked ? -1 : 1
+
+      patchPostAcrossCaches(payload.postId, (post) => ({
+        ...post,
+        isLikedByMe: !payload.isLiked,
+        likeCount: Math.max(0, post.likeCount + likeDelta),
+      }))
+
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" })
     },
   })
 
@@ -52,10 +152,14 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
         method,
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "my-reposts", user?.id] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "reposts", user?.id] })
+    onSuccess: (_response, payload) => {
+      patchPostAcrossCaches(payload.postId, (post) => ({
+        ...post,
+        isRepostedByMe: !payload.isReposted,
+      }))
+
+      queryClient.invalidateQueries({ queryKey: ["posts", "my-reposts", user?.id], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["posts", "reposts", user?.id], refetchType: "inactive" })
     },
   })
 
@@ -74,13 +178,17 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
         [variables.postId]: "",
       }))
 
+      patchPostAcrossCaches(variables.postId, (post) => ({
+        ...post,
+        commentCount: post.commentCount + 1,
+      }))
+
       queryClient.invalidateQueries({ queryKey: ["comments", "thread", variables.postId] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
-      queryClient.invalidateQueries({ queryKey: ["comments", "user", user?.id] })
+      queryClient.invalidateQueries({ queryKey: ["comments", "user", user?.id], refetchType: "inactive" })
     },
   })
 
-  const posts = data?.data || []
+  const posts = data?.pages.flatMap((page) => page.data) || []
   const activeCommentPostId = activeCommentPost?.id || null
   const activeCommentDraft = activeCommentPostId ? (commentDrafts[activeCommentPostId] || "") : ""
   const activeCommentPending = Boolean(
@@ -112,6 +220,34 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
       content,
     })
   }
+
+  useEffect(() => {
+    const target = loadMoreRef.current
+
+    if (!target || !hasNextPage || isFetchingNextPage) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage()
+        }
+      },
+      {
+        root: null,
+        rootMargin: "300px 0px",
+        threshold: 0.01,
+      }
+    )
+
+    observer.observe(target)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -191,6 +327,18 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
             {t("feed.noPosts")}
           </div>
         )}
+
+        {!isLoading && !error && hasNextPage && (
+          <div ref={loadMoreRef} className="flex h-16 items-center justify-center px-6 py-4">
+            {isFetchingNextPage ? (
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={14} className="animate-spin" />
+                {t("common.loading")}
+              </span>
+            ) : null}
+          </div>
+        )}
+
         <div className="h-20" />
       </div>
 

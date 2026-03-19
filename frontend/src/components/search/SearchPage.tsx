@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, Loader2 } from "lucide-react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useApi } from "@/hooks/useApi"
 import { useI18n } from "@/contexts/I18nContext"
 import { UserHoverPreview } from "@/components/profile/UserHoverPreview"
@@ -39,34 +39,44 @@ export function SearchPage() {
   const [debouncedQuery, setDebouncedQuery] = useState(query)
   const normalizedDebouncedQuery = debouncedQuery.trim()
 
+  const usersSearchPath = useMemo(
+    () =>
+      `/api/search?type=users${
+        normalizedDebouncedQuery ? `&q=${encodeURIComponent(normalizedDebouncedQuery)}` : ""
+      }`,
+    [normalizedDebouncedQuery]
+  )
+
+  const postsSearchPath = useMemo(
+    () =>
+      `/api/search?type=posts${
+        normalizedDebouncedQuery ? `&q=${encodeURIComponent(normalizedDebouncedQuery)}` : ""
+      }`,
+    [normalizedDebouncedQuery]
+  )
+
   // Debounce query
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedQuery(query)
-    }, 500)
+    }, 250)
     return () => clearTimeout(handler)
   }, [query])
 
   const usersQuery = useQuery<SearchUsersResponse>({
     queryKey: ["search", "users", normalizedDebouncedQuery],
-    queryFn: () =>
-      apiFetch(
-        `/api/search?type=users${
-          normalizedDebouncedQuery ? `&q=${encodeURIComponent(normalizedDebouncedQuery)}` : ""
-        }`
-      ),
+    queryFn: ({ signal }) => apiFetch(usersSearchPath, { signal }),
     enabled: activeTab !== "trending",
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   })
 
   const trendingQuery = useQuery<SearchPostsResponse>({
     queryKey: ["search", "posts", normalizedDebouncedQuery],
-    queryFn: () =>
-      apiFetch(
-        `/api/search?type=posts${
-          normalizedDebouncedQuery ? `&q=${encodeURIComponent(normalizedDebouncedQuery)}` : ""
-        }`
-      ),
+    queryFn: ({ signal }) => apiFetch(postsSearchPath, { signal }),
     enabled: activeTab === "trending",
+    staleTime: 45_000,
+    placeholderData: keepPreviousData,
   })
 
   const followMutation = useMutation({

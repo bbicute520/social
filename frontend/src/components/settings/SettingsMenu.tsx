@@ -1,4 +1,4 @@
-import { Moon, Sun, Globe, Bell, Lock, LogOut, ChevronRight, Check } from "lucide-react"
+import { Moon, Sun, Globe, LogOut, ChevronRight, Check } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useI18n, type Language } from "@/contexts/I18nContext"
 import { useClerk } from "@clerk/clerk-react"
@@ -71,24 +71,6 @@ export function SettingsMenu({ isOpen, onClose }: SettingsMenuProps) {
               {t("settings.language")}
             </div>
             <ChevronRight size={14} className="text-muted-foreground" />
-          </button>
-
-          {/* Notifications */}
-          <button
-            onClick={() => {}}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40 transition-colors text-left"
-          >
-            <Bell size={16} className="text-muted-foreground shrink-0" />
-            {t("settings.notifications")}
-          </button>
-
-          {/* Privacy */}
-          <button
-            onClick={() => {}}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40 transition-colors text-left"
-          >
-            <Lock size={16} className="text-muted-foreground shrink-0" />
-            {t("settings.privacy")}
           </button>
 
           {/* Divider */}

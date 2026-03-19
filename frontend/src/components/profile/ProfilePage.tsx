@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
 import { useAuth } from "@clerk/clerk-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,30 @@ type UpdateProfilePayload = {
   }>
 }
 
+type FollowListTab = "followers" | "following"
+
+type FollowRelationUser = {
+  id: string
+  username: string
+  displayName: string | null
+  imageUrl: string | null
+  avatar?: string | null
+}
+
+type FollowersRelation = {
+  followerId: string
+  followingId: string
+  createdAt: string
+  follower: FollowRelationUser
+}
+
+type FollowingRelation = {
+  followerId: string
+  followingId: string
+  createdAt: string
+  following: FollowRelationUser
+}
+
 const USERNAME_REGEX = /^[a-zA-Z0-9_.]+$/
 
 const PROFILE_EDIT_LAYOUT = {
@@ -48,6 +72,13 @@ const PROFILE_EDIT_LAYOUT = {
   maxWidthPx: 620,
   maxHeightDvh: 88,
   bodyMaxHeightDvh: 58,
+} as const
+
+const FOLLOW_LIST_LAYOUT = {
+  widthVw: 88,
+  maxWidthPx: 520,
+  maxHeightDvh: 84,
+  bodyMaxHeightDvh: 56,
 } as const
 
 const APP_SIDEBAR_WIDTH_PX = 80
@@ -61,8 +92,19 @@ const PROFILE_EDIT_DIALOG_STYLE: CSSProperties = {
   left: `calc(50% + ${PROFILE_EDIT_CENTER_OFFSET_PX}px)`,
 }
 
+const FOLLOW_LIST_DIALOG_STYLE: CSSProperties = {
+  width: `min(${FOLLOW_LIST_LAYOUT.widthVw}vw, calc(100vw - ${APP_SIDEBAR_WIDTH_PX + PROFILE_EDIT_VIEWPORT_GUTTER_PX * 2}px))`,
+  maxWidth: `${FOLLOW_LIST_LAYOUT.maxWidthPx}px`,
+  maxHeight: `${FOLLOW_LIST_LAYOUT.maxHeightDvh}dvh`,
+  left: `calc(50% + ${PROFILE_EDIT_CENTER_OFFSET_PX}px)`,
+}
+
 const PROFILE_EDIT_BODY_STYLE: CSSProperties = {
   maxHeight: `${PROFILE_EDIT_LAYOUT.bodyMaxHeightDvh}dvh`,
+}
+
+const FOLLOW_LIST_BODY_STYLE: CSSProperties = {
+  maxHeight: `${FOLLOW_LIST_LAYOUT.bodyMaxHeightDvh}dvh`,
 }
 
 const getDisplayName = (user: User | undefined) => {
@@ -120,6 +162,8 @@ export function ProfilePage() {
   const { getToken } = useAuth()
   const { language, t } = useI18n()
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts")
+  const [isFollowListOpen, setIsFollowListOpen] = useState(false)
+  const [followListTab, setFollowListTab] = useState<FollowListTab>("followers")
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [username, setUsername] = useState("")
   const [displayName, setDisplayName] = useState("")
@@ -133,6 +177,34 @@ export function ProfilePage() {
 
   const { apiFetch } = useApi()
   const queryClient = useQueryClient()
+
+  const patchPostAcrossCaches = useCallback(
+    (postId: string, updater: (post: Post) => Post) => {
+      queryClient.setQueriesData<PaginatedResponse<Post>>({ queryKey: ["posts"] }, (current) => {
+        if (!current || !Array.isArray(current.data)) {
+          return current
+        }
+
+        let changed = false
+        const nextData = current.data.map((post) => {
+          if (post.id !== postId) {
+            return post
+          }
+
+          changed = true
+          return updater(post)
+        })
+
+        return changed
+          ? {
+              ...current,
+              data: nextData,
+            }
+          : current
+      })
+    },
+    [queryClient]
+  )
 
   const { startUpload, isUploading: isAvatarUploading } = useUploadThing("imageUploader", {
     headers: async () => {
@@ -150,6 +222,44 @@ export function ProfilePage() {
   const { data: me, isLoading, error } = useQuery<User>({
     queryKey: ["users", "me"],
     queryFn: () => apiFetch("/api/users/me"),
+  })
+
+  const {
+    data: followersRelations,
+    isLoading: isFollowersLoading,
+    isFetching: isFollowersFetching,
+    error: followersError,
+  } = useQuery<FollowersRelation[]>({
+    queryKey: ["users", "followers", me?.id],
+    queryFn: () => {
+      if (!me?.id) {
+        throw new Error("Missing user id")
+      }
+
+      return apiFetch(`/api/users/${me.id}/followers?limit=50`)
+    },
+    enabled: Boolean(isFollowListOpen && me?.id),
+    staleTime: 0,
+    refetchOnMount: "always",
+  })
+
+  const {
+    data: followingRelations,
+    isLoading: isFollowingLoading,
+    isFetching: isFollowingFetching,
+    error: followingError,
+  } = useQuery<FollowingRelation[]>({
+    queryKey: ["users", "following", me?.id],
+    queryFn: () => {
+      if (!me?.id) {
+        throw new Error("Missing user id")
+      }
+
+      return apiFetch(`/api/users/${me.id}/following?limit=50`)
+    },
+    enabled: Boolean(isFollowListOpen && me?.id),
+    staleTime: 0,
+    refetchOnMount: "always",
   })
 
   const { data: postPage, isLoading: isPostsLoading } = useQuery<PaginatedResponse<Post>>({
@@ -187,12 +297,11 @@ export function ProfilePage() {
       }),
     onSuccess: (updated: User) => {
       queryClient.setQueryData(["users", "me"], updated)
-      queryClient.invalidateQueries({ queryKey: ["users", "me"] })
       queryClient.invalidateQueries({ queryKey: ["users", "preview"] })
-      queryClient.invalidateQueries({ queryKey: ["posts"] })
-      queryClient.invalidateQueries({ queryKey: ["comments"] })
-      queryClient.invalidateQueries({ queryKey: ["notifications"] })
-      queryClient.invalidateQueries({ queryKey: ["search"] })
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["notifications"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["search"], refetchType: "inactive" })
       setIsEditOpen(false)
       setFormError(null)
     },
@@ -209,10 +318,16 @@ export function ProfilePage() {
         method,
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "user", me?.id] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "reposts", me?.id] })
+    onSuccess: (_response, payload) => {
+      const likeDelta = payload.isLiked ? -1 : 1
+
+      patchPostAcrossCaches(payload.postId, (post) => ({
+        ...post,
+        isLikedByMe: !payload.isLiked,
+        likeCount: Math.max(0, post.likeCount + likeDelta),
+      }))
+
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" })
     },
   })
 
@@ -223,11 +338,14 @@ export function ProfilePage() {
         method,
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "user", me?.id] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "reposts", me?.id] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "my-reposts", me?.id] })
+    onSuccess: (_response, payload) => {
+      patchPostAcrossCaches(payload.postId, (post) => ({
+        ...post,
+        isRepostedByMe: !payload.isReposted,
+      }))
+
+      queryClient.invalidateQueries({ queryKey: ["posts", "my-reposts", me?.id], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["posts", "reposts", me?.id], refetchType: "inactive" })
     },
   })
 
@@ -246,11 +364,30 @@ export function ProfilePage() {
         [variables.postId]: "",
       }))
 
+      patchPostAcrossCaches(variables.postId, (post) => ({
+        ...post,
+        commentCount: post.commentCount + 1,
+      }))
+
       queryClient.invalidateQueries({ queryKey: ["comments", "thread", variables.postId] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "feed"] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "user", me?.id] })
-      queryClient.invalidateQueries({ queryKey: ["posts", "reposts", me?.id] })
-      queryClient.invalidateQueries({ queryKey: ["comments", "user", me?.id] })
+      queryClient.invalidateQueries({ queryKey: ["comments", "user", me?.id], refetchType: "inactive" })
+    },
+  })
+
+  const followMutation = useMutation({
+    mutationFn: async (payload: { userId: string; shouldFollow: boolean }) => {
+      return apiFetch(`/api/users/${payload.userId}/follow`, {
+        method: payload.shouldFollow ? "POST" : "DELETE",
+      })
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["users", "me"], refetchType: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["users", "followers", me?.id], refetchType: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["users", "following", me?.id], refetchType: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["users", "preview"], refetchType: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["search", "users"], refetchType: "inactive" }),
+      ])
     },
   })
 
@@ -262,6 +399,21 @@ export function ProfilePage() {
   const posts = postPage?.data || []
   const replies = repliesPage?.data || []
   const reposts = repostPage?.data || []
+  const followerUsers = useMemo<FollowRelationUser[]>(() => {
+    return (followersRelations || []).map((relation) => relation.follower).filter((user): user is FollowRelationUser => Boolean(user?.id))
+  }, [followersRelations])
+  const followingUsers = useMemo<FollowRelationUser[]>(() => {
+    return (followingRelations || []).map((relation) => relation.following).filter((user): user is FollowRelationUser => Boolean(user?.id))
+  }, [followingRelations])
+  const followingUserIds = useMemo(() => {
+    return new Set(followingUsers.map((user) => user.id))
+  }, [followingUsers])
+  const activeFollowUsers = followListTab === "followers" ? followerUsers : followingUsers
+  const isFollowListLoading = followListTab === "followers" ? isFollowersLoading : isFollowingLoading
+  const followListError = followListTab === "followers" ? followersError : followingError
+  const isFollowListRefreshing =
+    followMutation.isPending ||
+    (followListTab === "followers" ? isFollowersFetching : isFollowingFetching)
   const activeCommentPostId = activeCommentPost?.id || null
   const activeCommentDraft = activeCommentPostId ? (commentDrafts[activeCommentPostId] || "") : ""
   const activeCommentPending = Boolean(
@@ -274,6 +426,11 @@ export function ProfilePage() {
   const followingCount = me?._count?.following ?? me?.followingCount ?? 0
 
   const showUsernameHint = Boolean(me?.username && /^(user_|member_)/.test(me.username))
+
+  const openFollowList = (tab: FollowListTab) => {
+    setFollowListTab(tab)
+    setIsFollowListOpen(true)
+  }
 
   const openEditDialog = () => {
     if (!me) {
@@ -504,15 +661,23 @@ export function ProfilePage() {
         )}
 
         <div className="flex items-center gap-4 mb-4 text-sm">
-          <span>
+          <button
+            type="button"
+            className="text-left transition-opacity hover:opacity-80"
+            onClick={() => openFollowList("followers")}
+          >
             <span className="font-bold">{followerCount.toLocaleString()}</span>{" "}
             <span className="text-muted-foreground">{t("profile.followers")}</span>
-          </span>
+          </button>
           <span className="text-muted-foreground/30">·</span>
-          <span>
+          <button
+            type="button"
+            className="text-left transition-opacity hover:opacity-80"
+            onClick={() => openFollowList("following")}
+          >
             <span className="font-bold">{followingCount}</span>{" "}
             <span className="text-muted-foreground">{t("profile.following")}</span>
-          </span>
+          </button>
         </div>
 
         <Button
@@ -692,6 +857,120 @@ export function ProfilePage() {
           handleCreateComment(activeCommentPostId)
         }}
       />
+
+      <Dialog open={isFollowListOpen} onOpenChange={setIsFollowListOpen}>
+        <DialogContent
+          className="overflow-hidden rounded-[28px] border-2 border-border bg-card p-0 shadow-2xl"
+          style={FOLLOW_LIST_DIALOG_STYLE}
+        >
+          <DialogHeader className="border-b border-border/50 px-5 py-4">
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <span>
+                {followListTab === "followers"
+                  ? t("profile.followList.tabFollowers")
+                  : t("profile.followList.tabFollowing")}
+              </span>
+              {isFollowListRefreshing ? <Loader2 size={16} className="animate-spin text-muted-foreground" /> : null}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              {t("profile.followList.dialogDescription")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 border-b border-border/50">
+            <button
+              type="button"
+              onClick={() => setFollowListTab("followers")}
+              className={`py-3 text-sm font-semibold transition-colors ${
+                followListTab === "followers"
+                  ? "border-b-2 border-foreground text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t("profile.followList.tabFollowers")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFollowListTab("following")}
+              className={`py-3 text-sm font-semibold transition-colors ${
+                followListTab === "following"
+                  ? "border-b-2 border-foreground text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t("profile.followList.tabFollowing")}
+            </button>
+          </div>
+
+          <div className="overflow-y-auto divide-y divide-border/40" style={FOLLOW_LIST_BODY_STYLE}>
+            {isFollowListLoading && (
+              <div className="flex items-center justify-center gap-2 px-5 py-8 text-sm text-muted-foreground">
+                <Loader2 size={16} className="animate-spin" />
+                {t("profile.followList.loading")}
+              </div>
+            )}
+
+            {!isFollowListLoading && followListError && (
+              <div className="px-5 py-8 text-sm text-red-600">
+                {followListError instanceof Error ? followListError.message : t("profile.followList.error")}
+              </div>
+            )}
+
+            {!isFollowListLoading && !followListError && activeFollowUsers.length === 0 && (
+              <div className="px-5 py-8 text-sm text-muted-foreground">
+                {followListTab === "followers"
+                  ? t("profile.followList.emptyFollowers")
+                  : t("profile.followList.emptyFollowing")}
+              </div>
+            )}
+
+            {!isFollowListLoading &&
+              !followListError &&
+              activeFollowUsers.map((profile) => {
+                const isSelf = profile.id === me.id
+                const isFollowingUser = followListTab === "following" || followingUserIds.has(profile.id)
+                const followPending =
+                  followMutation.isPending && followMutation.variables?.userId === profile.id
+
+                return (
+                  <div key={`${followListTab}-${profile.id}`} className="flex items-center gap-3 px-5 py-3.5">
+                    <Avatar className="h-10 w-10 border border-border">
+                      <AvatarImage src={profile.avatar || profile.imageUrl || undefined} />
+                      <AvatarFallback>
+                        {(profile.displayName || profile.username || "U")[0]}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">
+                        {profile.displayName || profile.username || t("common.user")}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">@{profile.username}</p>
+                    </div>
+
+                    {!isSelf && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isFollowingUser ? "outline" : "default"}
+                        className="h-8 rounded-full px-4 text-xs"
+                        disabled={followPending || isFollowListRefreshing}
+                        onClick={() =>
+                          followMutation.mutate({
+                            userId: profile.id,
+                            shouldFollow: !isFollowingUser,
+                          })
+                        }
+                      >
+                        {isFollowingUser ? t("search.following") : t("search.follow")}
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
 
     <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
