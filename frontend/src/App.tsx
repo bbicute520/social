@@ -287,7 +287,7 @@ function App() {
 
         {/* Floating Add Page Button - Fixed góc trên phải, chỉ hiện ở trang Feed */}
         {activePage === "feed" && (
-          <div className="fixed top-6 right-6 z-50" ref={pickerRef}>
+          <div className="fixed top-6 right-6 z-40" ref={pickerRef}>
             <button
               onClick={() => setPickerOpen((value) => !value)}
               className="w-12 h-12 flex items-center justify-center rounded-2xl bg-card border-2 border-border text-foreground hover:bg-muted shadow-lg transition-all hover:scale-105"
@@ -322,7 +322,7 @@ function App() {
         {/* Fixed FAB — bottom right */}
         <button
           onClick={openPostModal}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-5 h-11 bg-card text-foreground border-2 border-border rounded-2xl font-semibold text-sm shadow-xl hover:bg-muted active:scale-95 transition-all"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-5 h-11 bg-card text-foreground border-2 border-border rounded-2xl font-semibold text-sm shadow-xl hover:bg-muted active:scale-95 transition-all"
         >
           <PenSquare size={16} strokeWidth={2.5} />
           {t("common.post")}

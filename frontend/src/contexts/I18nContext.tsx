@@ -65,6 +65,7 @@ const messages: Record<Language, Record<string, string>> = {
     "post.actions.closeComments": "An binh luan",
     "post.actions.repost": "Dang lai",
     "post.actions.undoRepost": "Bo dang lai",
+    "post.actions.share": "Chia se",
 
     "composer.title": "Tao chu de moi",
     "composer.drafts": "Ban nhap",
@@ -180,6 +181,7 @@ const messages: Record<Language, Record<string, string>> = {
     "post.actions.closeComments": "Hide comments",
     "post.actions.repost": "Repost",
     "post.actions.undoRepost": "Undo repost",
+    "post.actions.share": "Share",
 
     "composer.title": "Create a new thread",
     "composer.drafts": "Drafts",
