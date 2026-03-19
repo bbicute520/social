@@ -2,13 +2,8 @@ import { SignedIn, SignedOut, SignInButton, SignUpButton } from "@clerk/clerk-re
 import { Button } from "@/components/ui/button"
 import { AppLayout } from "./components/layout/AppLayout"
 import { SubPageContainer, type FilterOption } from "./components/layout/SubPageContainer"
-import { FeedPage } from "./components/feed/FeedPage"
-import { SearchPage } from "./components/search/SearchPage"
-import { NotificationsPage } from "./components/notifications/NotificationsPage"
-import { ProfilePage } from "./components/profile/ProfilePage"
-import { CreatePostModal } from "./components/post/CreatePostModal"
 import { Sidebar, type PageType } from "./components/layout/Sidebar"
-import { useState, useRef, useEffect } from "react"
+import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { Home, Search, Heart, User, PlusCircle, PenSquare } from "lucide-react"
 import { useLocalStorage } from "@/hooks/useLocalStorage"
 import { useI18n } from "@/contexts/I18nContext"
@@ -26,6 +21,37 @@ type PageMeta = {
   filterOptions?: FilterOption[]
   defaultFilter?: string
 }
+
+const loadFeedPage = () => import("./components/feed/FeedPage")
+const loadSearchPage = () => import("./components/search/SearchPage")
+const loadNotificationsPage = () => import("./components/notifications/NotificationsPage")
+const loadProfilePage = () => import("./components/profile/ProfilePage")
+const loadCreatePostModal = () => import("./components/post/CreatePostModal")
+
+const FeedPage = lazy(async () => {
+  const module = await loadFeedPage()
+  return { default: module.FeedPage }
+})
+
+const SearchPage = lazy(async () => {
+  const module = await loadSearchPage()
+  return { default: module.SearchPage }
+})
+
+const NotificationsPage = lazy(async () => {
+  const module = await loadNotificationsPage()
+  return { default: module.NotificationsPage }
+})
+
+const ProfilePage = lazy(async () => {
+  const module = await loadProfilePage()
+  return { default: module.ProfilePage }
+})
+
+const CreatePostModal = lazy(async () => {
+  const module = await loadCreatePostModal()
+  return { default: module.CreatePostModal }
+})
 
 const buildPageMeta = (t: (key: string) => string): Record<PageType, PageMeta> => {
   const feedFilters: FilterOption[] = [
@@ -96,6 +122,14 @@ function PageContent({ pageType, onOpenPost, activeFilter }: {
     case "profile":       return <ProfilePage />
     default:              return <FeedPage onOpenPost={onOpenPost} activeFilter={activeFilter} />
   }
+}
+
+function PageContentFallback() {
+  return (
+    <div className="flex min-h-[220px] items-center justify-center px-6 py-8 text-sm text-muted-foreground">
+      Loading...
+    </div>
+  )
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -213,6 +247,19 @@ function App() {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [pickerOpen])
 
+  useEffect(() => {
+    const preloadTimer = window.setTimeout(() => {
+      void loadSearchPage()
+      void loadNotificationsPage()
+      void loadProfilePage()
+      void loadCreatePostModal()
+    }, 1200)
+
+    return () => {
+      window.clearTimeout(preloadTimer)
+    }
+  }, [])
+
   const columns = activePage === "feed"
     ? feedColumns
     : [
@@ -274,11 +321,13 @@ function App() {
                   onFilterChange={(key) => updateFilter(col.id, key)}
                   disableInternalScroll={isSingleColumnMode}
                 >
-                  <PageContent
-                    pageType={col.pageType}
-                    onOpenPost={openPostModal}
-                    activeFilter={col.activeFilter}
-                  />
+                  <Suspense fallback={<PageContentFallback />}>
+                    <PageContent
+                      pageType={col.pageType}
+                      onOpenPost={openPostModal}
+                      activeFilter={col.activeFilter}
+                    />
+                  </Suspense>
                 </SubPageContainer>
               </motion.div>
             ))}
@@ -287,7 +336,7 @@ function App() {
 
         {/* Floating Add Page Button - Fixed góc trên phải, chỉ hiện ở trang Feed */}
         {activePage === "feed" && (
-          <div className="fixed top-6 right-6 z-50" ref={pickerRef}>
+          <div className="fixed top-6 right-6 z-40" ref={pickerRef}>
             <button
               onClick={() => setPickerOpen((value) => !value)}
               className="w-12 h-12 flex items-center justify-center rounded-2xl bg-card border-2 border-border text-foreground hover:bg-muted shadow-lg transition-all hover:scale-105"
@@ -322,17 +371,19 @@ function App() {
         {/* Fixed FAB — bottom right */}
         <button
           onClick={openPostModal}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-5 h-11 bg-card text-foreground border-2 border-border rounded-2xl font-semibold text-sm shadow-xl hover:bg-muted active:scale-95 transition-all"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-5 h-11 bg-card text-foreground border-2 border-border rounded-2xl font-semibold text-sm shadow-xl hover:bg-muted active:scale-95 transition-all"
         >
           <PenSquare size={16} strokeWidth={2.5} />
           {t("common.post")}
         </button>
 
-        <CreatePostModal
-          key={postModalKey}
-          isOpen={isPostModalOpen}
-          onClose={() => setIsPostModalOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <CreatePostModal
+            key={postModalKey}
+            isOpen={isPostModalOpen}
+            onClose={() => setIsPostModalOpen(false)}
+          />
+        </Suspense>
       </SignedIn>
     </>
   )

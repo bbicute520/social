@@ -30,6 +30,7 @@ interface PostCardProps {
 }
 
 export const PostCard = memo(function PostCard({
+  id,
   author,
   content,
   imageUrls = [],
@@ -48,6 +49,31 @@ export const PostCard = memo(function PostCard({
   showActions = true,
 }: PostCardProps) {
   const { t } = useI18n()
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}${window.location.pathname}?post=${encodeURIComponent(id)}`
+    const shareText = content.length > 140 ? `${content.slice(0, 137)}...` : content
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: author.name,
+          text: shareText,
+          url: shareUrl,
+        })
+        return
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        return
+      }
+
+      window.prompt(t("post.actions.copyLinkPrompt"), shareUrl)
+    } catch (error) {
+      console.error("Share failed", error)
+    }
+  }
 
   return (
     <div className="flex gap-3 px-6 py-4 border-b-2 border-border hover:bg-muted/10 transition-colors will-change-transform">
@@ -147,7 +173,11 @@ export const PostCard = memo(function PostCard({
               <Repeat2 size={18} className="transition-all group-hover:scale-110 group-active:scale-95" />
             </button>
             
-            <button className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors group">
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors group"
+              title={t("post.actions.share")}
+            >
               <Send size={18} className="transition-all group-hover:scale-110 group-active:scale-95" />
             </button>
           </div>

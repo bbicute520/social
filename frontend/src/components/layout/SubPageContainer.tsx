@@ -97,7 +97,7 @@ export function SubPageContainer({
 
         {/* Three-dot menu (right-absolute) */}
         {isDeletable && (
-          <div className="absolute right-0" ref={menuRef}>
+          <div className="absolute right-0 z-[60]" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(v => !v)}
               className="w-9 h-9 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-colors"
