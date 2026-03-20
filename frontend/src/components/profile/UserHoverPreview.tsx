@@ -119,7 +119,11 @@ export function UserHoverPreview({
         method: nextFollowState ? "POST" : "DELETE",
       })
     },
-    onMutate: (nextFollowState) => {
+    onMutate: async (nextFollowState) => {
+      await queryClient.cancelQueries({ queryKey: ["users", "preview", username] })
+      await queryClient.cancelQueries({ queryKey: ["search", "users"] })
+      await queryClient.cancelQueries({ queryKey: ["users", "me"] })
+
       const previousProfile = queryClient.getQueryData<ProfilePreviewResponse | undefined>([
         "users",
         "preview",
@@ -191,7 +195,9 @@ export function UserHoverPreview({
 
       if (previousMe) {
         const previousFollowingCount = previousMe._count?.following ?? previousMe.followingCount ?? 0
-        const nextFollowingCount = Math.max(0, previousFollowingCount + (nextFollowState ? 1 : -1))
+        const previousFollowState = Boolean(previousProfile?.isFollowing)
+        const followingDelta = nextFollowState === previousFollowState ? 0 : nextFollowState ? 1 : -1
+        const nextFollowingCount = Math.max(0, previousFollowingCount + followingDelta)
 
         queryClient.setQueryData<User>(["users", "me"], {
           ...previousMe,
