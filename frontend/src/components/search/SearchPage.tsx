@@ -17,6 +17,10 @@ type SearchUsersResponse = {
   users: SearchUser[]
 }
 
+type ProfilePreviewResponse = User & {
+  isFollowing?: boolean
+}
+
 export function SearchPage() {
   const { t } = useI18n()
   const { apiFetch } = useApi()
@@ -50,14 +54,21 @@ export function SearchPage() {
   })
 
   const followMutation = useMutation({
-    mutationFn: async (payload: { userId: string; shouldFollow: boolean }) => {
+    mutationFn: async (payload: { userId: string; username: string; shouldFollow: boolean }) => {
       return apiFetch(`/api/users/${payload.userId}/follow`, {
         method: payload.shouldFollow ? "POST" : "DELETE",
       })
     },
-    onMutate: async ({ userId, shouldFollow }) => {
+    onMutate: async ({ userId, username, shouldFollow }) => {
+      await queryClient.cancelQueries({ queryKey: ["search", "users"] })
+      await queryClient.cancelQueries({ queryKey: ["users", "preview", username] })
+      await queryClient.cancelQueries({ queryKey: ["users", "me"] })
+
       const previousQueries = queryClient.getQueriesData<SearchUsersResponse>({
         queryKey: ["search", "users"],
+      })
+      const previousPreviewQueries = queryClient.getQueriesData<ProfilePreviewResponse>({
+        queryKey: ["users", "preview"],
       })
       const previousMe = queryClient.getQueryData<User>(["users", "me"])
 
@@ -106,7 +117,30 @@ export function SearchPage() {
         })
       }
 
-      return { previousQueries, previousMe }
+      for (const [cacheKey, data] of previousPreviewQueries) {
+        if (!data || data.id !== userId) {
+          continue
+        }
+
+        const baseFollowerCount = data.followerCount ?? data._count?.followers ?? 0
+        const previousFollowState = Boolean(data.isFollowing)
+        const followerDelta = shouldFollow === previousFollowState ? 0 : shouldFollow ? 1 : -1
+        const nextFollowerCount = Math.max(0, baseFollowerCount + followerDelta)
+
+        queryClient.setQueryData<ProfilePreviewResponse>(cacheKey, {
+          ...data,
+          isFollowing: shouldFollow,
+          followerCount: nextFollowerCount,
+          _count: data._count
+            ? {
+                ...data._count,
+                followers: nextFollowerCount,
+              }
+            : data._count,
+        })
+      }
+
+      return { previousQueries, previousPreviewQueries, previousMe }
     },
     onError: (_error, _payload, context) => {
       if (!context) {
@@ -120,9 +154,16 @@ export function SearchPage() {
       for (const [cacheKey, data] of context.previousQueries) {
         queryClient.setQueryData(cacheKey, data)
       }
+
+      for (const [cacheKey, data] of context.previousPreviewQueries ?? []) {
+        queryClient.setQueryData(cacheKey, data)
+      }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["search", "users"] })
+      queryClient.invalidateQueries({ queryKey: ["search", "users"], refetchType: "active" })
+      queryClient.invalidateQueries({ queryKey: ["users", "preview"], refetchType: "active" })
+      queryClient.invalidateQueries({ queryKey: ["users", "followers"], refetchType: "active" })
+      queryClient.invalidateQueries({ queryKey: ["users", "following"], refetchType: "active" })
       queryClient.invalidateQueries({ queryKey: ["users", "me"], refetchType: "active" })
     },
   })
@@ -137,6 +178,7 @@ export function SearchPage() {
 
     followMutation.mutate({
       userId: user.id,
+      username: user.username,
       shouldFollow: !user.isFollowing,
     })
   }

@@ -252,7 +252,7 @@ export const getRepostsByUser = async (
 export const repostPost = async (userId: string, postId: string) => {
   const post = await prisma.post.findUnique({
     where: { id: postId },
-    select: { id: true },
+    select: { id: true, authorId: true },
   });
 
   if (!post) {
@@ -260,12 +260,34 @@ export const repostPost = async (userId: string, postId: string) => {
   }
 
   try {
-    const repost = await prisma.repost.create({
-      data: {
-        userId,
-        postId,
-      },
+    const repost = await prisma.$transaction(async (tx: any) => {
+      const created = await tx.repost.create({
+        data: {
+          userId,
+          postId,
+        },
+      });
+
+      if (post.authorId !== userId) {
+        await tx.notification.create({
+          data: {
+            recipientId: post.authorId,
+            actorId: userId,
+            type: "REPOST",
+            postId,
+          },
+        });
+      }
+
+      return created;
     });
+
+    if (post.authorId !== userId) {
+      await pusherServer.trigger(`private-user-${post.authorId}`, "post:reposted", {
+        postId,
+        userId,
+      });
+    }
 
     return {
       success: true,
