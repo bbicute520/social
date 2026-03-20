@@ -59,6 +59,23 @@ export function SearchPage() {
       const previousQueries = queryClient.getQueriesData<SearchUsersResponse>({
         queryKey: ["search", "users"],
       })
+      const previousMe = queryClient.getQueryData<User>(["users", "me"])
+
+      if (previousMe) {
+        const baseFollowingCount = previousMe._count?.following ?? previousMe.followingCount ?? 0
+        const nextFollowingCount = Math.max(0, baseFollowingCount + (shouldFollow ? 1 : -1))
+
+        queryClient.setQueryData<User>(["users", "me"], {
+          ...previousMe,
+          followingCount: nextFollowingCount,
+          _count: previousMe._count
+            ? {
+                ...previousMe._count,
+                following: nextFollowingCount,
+              }
+            : previousMe._count,
+        })
+      }
 
       for (const [cacheKey, data] of previousQueries) {
         if (!data) {
@@ -89,11 +106,15 @@ export function SearchPage() {
         })
       }
 
-      return { previousQueries }
+      return { previousQueries, previousMe }
     },
     onError: (_error, _payload, context) => {
       if (!context) {
         return
+      }
+
+      if (context.previousMe) {
+        queryClient.setQueryData(["users", "me"], context.previousMe)
       }
 
       for (const [cacheKey, data] of context.previousQueries) {
@@ -102,6 +123,7 @@ export function SearchPage() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["search", "users"] })
+      queryClient.invalidateQueries({ queryKey: ["users", "me"], refetchType: "active" })
     },
   })
 

@@ -52,6 +52,29 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
         method: shouldFollow ? "POST" : "DELETE",
       })
     },
+    onMutate: async (shouldFollow) => {
+      const previousMe = queryClient.getQueryData<User>(["users", "me"])
+
+      if (!previousMe) {
+        return { previousMe }
+      }
+
+      const baseFollowingCount = previousMe._count?.following ?? previousMe.followingCount ?? 0
+      const nextFollowingCount = Math.max(0, baseFollowingCount + (shouldFollow ? 1 : -1))
+
+      queryClient.setQueryData<User>(["users", "me"], {
+        ...previousMe,
+        followingCount: nextFollowingCount,
+        _count: previousMe._count
+          ? {
+              ...previousMe._count,
+              following: nextFollowingCount,
+            }
+          : previousMe._count,
+      })
+
+      return { previousMe }
+    },
     onSuccess: (_response, shouldFollow) => {
       queryClient.setQueryData<ProfilePreviewResponse | undefined>(["users", "preview", username], (previous) => {
         if (!previous) {
@@ -77,6 +100,14 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
       queryClient.invalidateQueries({ queryKey: ["search", "users"], refetchType: "inactive" })
       queryClient.invalidateQueries({ queryKey: ["users", "followers"], refetchType: "inactive" })
       queryClient.invalidateQueries({ queryKey: ["users", "following"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["users", "me"], refetchType: "active" })
+    },
+    onError: (_error, _shouldFollow, context) => {
+      if (!context?.previousMe) {
+        return
+      }
+
+      queryClient.setQueryData(["users", "me"], context.previousMe)
     },
   })
 

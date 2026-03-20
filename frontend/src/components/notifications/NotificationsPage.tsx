@@ -48,7 +48,7 @@ export function NotificationsPage({ activeFilter = "all" }: NotificationsPagePro
       isRead: n.isRead,
       category,
       originalType: n.type,
-      postId: n.postId || null,
+      postId: n.postId || n.post?.id || n.comment?.postId || null,
       commentId: n.commentId || null,
     }
   })

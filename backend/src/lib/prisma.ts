@@ -3,7 +3,33 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL + "&sslmode=require&uselibpqcompat=true" });
+const buildConnectionString = () => {
+  const baseUrl = process.env.DATABASE_URL;
+
+  if (!baseUrl) {
+    return "";
+  }
+
+  // CI integration tests use a local Postgres service without SSL.
+  if (process.env.NODE_ENV === "test") {
+    return baseUrl;
+  }
+
+  try {
+    const parsed = new URL(baseUrl);
+    if (!parsed.searchParams.has("sslmode")) {
+      parsed.searchParams.set("sslmode", "require");
+    }
+    if (!parsed.searchParams.has("uselibpqcompat")) {
+      parsed.searchParams.set("uselibpqcompat", "true");
+    }
+    return parsed.toString();
+  } catch {
+    return baseUrl;
+  }
+};
+
+const pool = new Pool({ connectionString: buildConnectionString() });
 const adapter = new PrismaPg(pool as any);
 
 const globalForPrisma = globalThis as unknown as {
