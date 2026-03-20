@@ -5,7 +5,7 @@ import { useApi } from "@/hooks/useApi"
 import type { PaginatedResponse, Post } from "@/types/api"
 import { Loader2 } from "lucide-react"
 import { useUser } from "@clerk/clerk-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useI18n } from "@/contexts/I18nContext"
 import { formatRelativeTime } from "@/lib/time"
 import { CommentThreadDialog } from "./CommentThreadDialog"
@@ -245,46 +245,35 @@ export function FeedPage({ onOpenPost, activeFilter, focusedPostId, onFocusedPos
     },
   })
 
-  const posts = data?.pages.flatMap((page) => page.data) || []
+  const posts = useMemo(
+    () => data?.pages.flatMap((page) => page.data) ?? [],
+    [data]
+  )
   const focusedPost = focusedPostQuery.data || null
   const hasFocusedPostInFeed = Boolean(
     focusedPostId && posts.some((post) => post.id === focusedPostId)
   )
   const focusedPostToRender = focusedPostId && !hasFocusedPostInFeed ? focusedPost : null
-  const activeCommentPostId = activeCommentPost?.id || null
+  const focusedPostForDialog = useMemo(() => {
+    if (!focusedPostId) {
+      return null
+    }
+
+    const matchedPost = posts.find((post) => post.id === focusedPostId)
+    if (matchedPost) {
+      return matchedPost
+    }
+
+    return focusedPost
+  }, [focusedPostId, posts, focusedPost])
+  const commentDialogPost = activeCommentPost ?? focusedPostForDialog
+  const activeCommentPostId = commentDialogPost?.id || null
   const activeCommentDraft = activeCommentPostId ? (commentDrafts[activeCommentPostId] || "") : ""
   const activeCommentPending = Boolean(
     createCommentMutation.isPending &&
       activeCommentPostId &&
       createCommentMutation.variables?.postId === activeCommentPostId
   )
-
-  useEffect(() => {
-    if (!focusedPostId || !hasFocusedPostInFeed) {
-      return
-    }
-
-    const matchedPost = posts.find((post) => post.id === focusedPostId)
-    if (matchedPost) {
-      setActiveCommentPost(matchedPost)
-    }
-
-    onFocusedPostHandled?.()
-  }, [focusedPostId, hasFocusedPostInFeed, onFocusedPostHandled, posts])
-
-  useEffect(() => {
-    if (!focusedPostId || !focusedPost || hasFocusedPostInFeed) {
-      return
-    }
-
-    setActiveCommentPost(focusedPost)
-  }, [focusedPostId, focusedPost, hasFocusedPostInFeed])
-
-  useEffect(() => {
-    if (focusedPostId && focusedPost && !hasFocusedPostInFeed) {
-      onFocusedPostHandled?.()
-    }
-  }, [focusedPostId, focusedPost, hasFocusedPostInFeed, onFocusedPostHandled])
 
   const handleToggleComments = (post: Post) => {
     setActiveCommentPost((prev) => (prev?.id === post.id ? null : post))
@@ -376,7 +365,7 @@ export function FeedPage({ onOpenPost, activeFilter, focusedPostId, onFocusedPos
           const timestamp = formatRelativeTime(post.createdAt, language, t)
           const isLiked = Boolean(post.isLikedByMe)
           const isReposted = Boolean(post.isRepostedByMe)
-          const isCommentsOpen = activeCommentPost?.id === post.id
+          const isCommentsOpen = commentDialogPost?.id === post.id
           const likeDisabled =
             likeMutation.isPending && likeMutation.variables?.postId === post.id
           const repostDisabled =
@@ -448,7 +437,7 @@ export function FeedPage({ onOpenPost, activeFilter, focusedPostId, onFocusedPos
                   isLiked: Boolean(focusedPostToRender.isLikedByMe),
                 })
               }
-              commentsOpen={activeCommentPost?.id === focusedPostToRender.id}
+              commentsOpen={commentDialogPost?.id === focusedPostToRender.id}
               onToggleComments={() => handleToggleComments(focusedPostToRender)}
               isReposted={Boolean(focusedPostToRender.isRepostedByMe)}
               onToggleRepost={() =>
@@ -490,13 +479,14 @@ export function FeedPage({ onOpenPost, activeFilter, focusedPostId, onFocusedPos
       </div>
 
       <CommentThreadDialog
-        isOpen={Boolean(activeCommentPost)}
-        post={activeCommentPost}
+        isOpen={Boolean(commentDialogPost)}
+        post={commentDialogPost}
         draft={activeCommentDraft}
         isSubmitting={activeCommentPending}
         onOpenChange={(open) => {
           if (!open) {
             setActiveCommentPost(null)
+            onFocusedPostHandled?.()
           }
         }}
         onDraftChange={(value) => {
