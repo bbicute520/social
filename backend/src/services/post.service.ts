@@ -157,6 +157,35 @@ export const getPostsByUser = async (
   };
 };
 
+export const getPostById = async (postId: string, viewerUserId: string) => {
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    include: {
+      author: true,
+      likes: {
+        where: { userId: viewerUserId },
+        select: { id: true },
+      },
+      reposts: {
+        where: { userId: viewerUserId },
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!post) {
+    throw new ApiError(404, "Post not found");
+  }
+
+  const { likes, reposts, ...rest } = post;
+
+  return {
+    ...rest,
+    isLikedByMe: likes.length > 0,
+    isRepostedByMe: reposts.length > 0,
+  };
+};
+
 export const getRepostsByUser = async (
   targetUserId: string,
   viewerUserId: string,

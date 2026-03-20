@@ -1,6 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { PostCard } from "./PostCard"
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useApi } from "@/hooks/useApi"
 import type { PaginatedResponse, Post } from "@/types/api"
 import { Loader2 } from "lucide-react"
@@ -14,11 +14,13 @@ import { useCurrentUserProfile } from "@/hooks/useCurrentUserProfile"
 interface FeedPageProps {
   onOpenPost: () => void
   activeFilter?: string
+  focusedPostId?: string | null
+  onFocusedPostHandled?: () => void
 }
 
 const FEED_PAGE_SIZE = 20
 
-export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
+export function FeedPage({ onOpenPost, activeFilter, focusedPostId, onFocusedPostHandled }: FeedPageProps) {
   const { language, t } = useI18n()
   const { apiFetch } = useApi()
   const { user } = useUser()
@@ -125,6 +127,13 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
     },
   })
 
+  const focusedPostQuery = useQuery<Post>({
+    queryKey: ["posts", "detail", focusedPostId],
+    queryFn: () => apiFetch(`/api/posts/${focusedPostId}`),
+    enabled: Boolean(focusedPostId),
+    staleTime: 30_000,
+  })
+
   const likeMutation = useMutation({
     mutationFn: async (payload: { postId: string; isLiked: boolean }) => {
       const method = payload.isLiked ? "DELETE" : "POST"
@@ -163,6 +172,54 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
     },
   })
 
+  const deletePostMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      return apiFetch(`/api/posts/${postId}`, {
+        method: "DELETE",
+      })
+    },
+    onSuccess: (_response, postId) => {
+      queryClient.setQueriesData({ queryKey: ["posts"] }, (current) => {
+        if (!current || typeof current !== "object") {
+          return current
+        }
+
+        const singlePage = current as PaginatedResponse<Post>
+        if (Array.isArray(singlePage.data)) {
+          return {
+            ...singlePage,
+            data: singlePage.data.filter((post) => post.id !== postId),
+          }
+        }
+
+        const infinitePages = current as {
+          pages?: PaginatedResponse<Post>[]
+          pageParams?: unknown[]
+        }
+
+        if (!Array.isArray(infinitePages.pages)) {
+          return current
+        }
+
+        return {
+          ...infinitePages,
+          pages: infinitePages.pages.map((page) => ({
+            ...page,
+            data: page.data.filter((post) => post.id !== postId),
+          })),
+        }
+      })
+
+      if (focusedPostId === postId) {
+        onFocusedPostHandled?.()
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["notifications"], refetchType: "inactive" })
+    },
+  })
+
   const createCommentMutation = useMutation({
     mutationFn: async (payload: { postId: string; content: string }) => {
       return apiFetch(`/api/comments/post/${payload.postId}`, {
@@ -189,6 +246,11 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
   })
 
   const posts = data?.pages.flatMap((page) => page.data) || []
+  const focusedPost = focusedPostQuery.data || null
+  const hasFocusedPostInFeed = Boolean(
+    focusedPostId && posts.some((post) => post.id === focusedPostId)
+  )
+  const focusedPostToRender = focusedPostId && !hasFocusedPostInFeed ? focusedPost : null
   const activeCommentPostId = activeCommentPost?.id || null
   const activeCommentDraft = activeCommentPostId ? (commentDrafts[activeCommentPostId] || "") : ""
   const activeCommentPending = Boolean(
@@ -196,6 +258,33 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
       activeCommentPostId &&
       createCommentMutation.variables?.postId === activeCommentPostId
   )
+
+  useEffect(() => {
+    if (!focusedPostId || !hasFocusedPostInFeed) {
+      return
+    }
+
+    const matchedPost = posts.find((post) => post.id === focusedPostId)
+    if (matchedPost) {
+      setActiveCommentPost(matchedPost)
+    }
+
+    onFocusedPostHandled?.()
+  }, [focusedPostId, hasFocusedPostInFeed, onFocusedPostHandled, posts])
+
+  useEffect(() => {
+    if (!focusedPostId || !focusedPost || hasFocusedPostInFeed) {
+      return
+    }
+
+    setActiveCommentPost(focusedPost)
+  }, [focusedPostId, focusedPost, hasFocusedPostInFeed])
+
+  useEffect(() => {
+    if (focusedPostId && focusedPost && !hasFocusedPostInFeed) {
+      onFocusedPostHandled?.()
+    }
+  }, [focusedPostId, focusedPost, hasFocusedPostInFeed, onFocusedPostHandled])
 
   const handleToggleComments = (post: Post) => {
     setActiveCommentPost((prev) => (prev?.id === post.id ? null : post))
@@ -317,10 +406,68 @@ export function FeedPage({ onOpenPost, activeFilter }: FeedPageProps) {
                 isReposted={isReposted}
                 repostDisabled={Boolean(repostDisabled)}
                 onToggleRepost={() => repostMutation.mutate({ postId: post.id, isReposted })}
+                canDelete={Boolean(me?.id && post.authorId === me.id)}
+                deleteDisabled={deletePostMutation.isPending && deletePostMutation.variables === post.id}
+                onDelete={() => {
+                  if (deletePostMutation.isPending) {
+                    return
+                  }
+                  deletePostMutation.mutate(post.id)
+                }}
               />
             </div>
           )
         })}
+
+        {!isLoading && !error && focusedPostToRender && (
+          <div className="border-y border-blue-200/60 bg-blue-50/50">
+            <div className="px-6 pt-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
+              Opened from notification
+            </div>
+            <PostCard
+              id={focusedPostToRender.id}
+              author={{
+                name: focusedPostToRender.author.displayName || focusedPostToRender.author.username || t("common.anonymous"),
+                username: focusedPostToRender.author.username || "unknown",
+                avatar:
+                  focusedPostToRender.author.avatar ||
+                  focusedPostToRender.author.imageUrl ||
+                  `https://ui-avatars.com/api/?name=${focusedPostToRender.author.username || "User"}`,
+                isVerified: focusedPostToRender.author.isVerified,
+              }}
+              content={focusedPostToRender.content}
+              imageUrls={focusedPostToRender.imageUrls}
+              timestamp={formatRelativeTime(focusedPostToRender.createdAt, language, t)}
+              likes={focusedPostToRender.likeCount}
+              comments={focusedPostToRender.commentCount}
+              hasReply={false}
+              isLiked={Boolean(focusedPostToRender.isLikedByMe)}
+              onToggleLike={() =>
+                likeMutation.mutate({
+                  postId: focusedPostToRender.id,
+                  isLiked: Boolean(focusedPostToRender.isLikedByMe),
+                })
+              }
+              commentsOpen={activeCommentPost?.id === focusedPostToRender.id}
+              onToggleComments={() => handleToggleComments(focusedPostToRender)}
+              isReposted={Boolean(focusedPostToRender.isRepostedByMe)}
+              onToggleRepost={() =>
+                repostMutation.mutate({
+                  postId: focusedPostToRender.id,
+                  isReposted: Boolean(focusedPostToRender.isRepostedByMe),
+                })
+              }
+              canDelete={Boolean(me?.id && focusedPostToRender.authorId === me.id)}
+              deleteDisabled={deletePostMutation.isPending && deletePostMutation.variables === focusedPostToRender.id}
+              onDelete={() => {
+                if (deletePostMutation.isPending) {
+                  return
+                }
+                deletePostMutation.mutate(focusedPostToRender.id)
+              }}
+            />
+          </div>
+        )}
         
         {!isLoading && posts.length === 0 && (
           <div className="text-center py-10 text-muted-foreground text-sm">

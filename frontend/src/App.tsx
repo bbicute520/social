@@ -26,6 +26,7 @@ const loadFeedPage = () => import("./components/feed/FeedPage")
 const loadSearchPage = () => import("./components/search/SearchPage")
 const loadNotificationsPage = () => import("./components/notifications/NotificationsPage")
 const loadProfilePage = () => import("./components/profile/ProfilePage")
+const loadUserProfilePage = () => import("./components/profile/UserProfilePage")
 const loadCreatePostModal = () => import("./components/post/CreatePostModal")
 
 const FeedPage = lazy(async () => {
@@ -46,6 +47,11 @@ const NotificationsPage = lazy(async () => {
 const ProfilePage = lazy(async () => {
   const module = await loadProfilePage()
   return { default: module.ProfilePage }
+})
+
+const UserProfilePage = lazy(async () => {
+  const module = await loadUserProfilePage()
+  return { default: module.UserProfilePage }
 })
 
 const CreatePostModal = lazy(async () => {
@@ -111,16 +117,37 @@ const resolveColumnTitle = (column: Column, pageMeta: Record<PageType, PageMeta>
 }
 
 // ─── Page content router ──────────────────────────────────────────────────────
-function PageContent({ pageType, onOpenPost, activeFilter }: {
+function PageContent({
+  pageType,
+  onOpenPost,
+  activeFilter,
+  selectedProfileUsername,
+  focusedPostId,
+  onFocusedPostHandled,
+}: {
   pageType: PageType
   onOpenPost: () => void
   activeFilter?: string
+  selectedProfileUsername?: string | null
+  focusedPostId?: string | null
+  onFocusedPostHandled?: () => void
 }) {
   switch (pageType) {
     case "search":        return <SearchPage />
     case "notifications": return <NotificationsPage activeFilter={activeFilter} />
-    case "profile":       return <ProfilePage />
-    default:              return <FeedPage onOpenPost={onOpenPost} activeFilter={activeFilter} />
+    case "profile":
+      return selectedProfileUsername
+        ? <UserProfilePage username={selectedProfileUsername} />
+        : <ProfilePage />
+    default:
+      return (
+        <FeedPage
+          onOpenPost={onOpenPost}
+          activeFilter={activeFilter}
+          focusedPostId={focusedPostId}
+          onFocusedPostHandled={onFocusedPostHandled}
+        />
+      )
   }
 }
 
@@ -148,6 +175,8 @@ function App() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false)
   const [postModalKey, setPostModalKey] = useState(0)
+  const [selectedProfileUsername, setSelectedProfileUsername] = useState<string | null>(null)
+  const [focusedPostId, setFocusedPostId] = useState<string | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   const openPostModal = () => {
@@ -195,7 +224,14 @@ function App() {
   }, [feedColumns, setFeedColumns])
 
   const handleNavigate = (page: PageType) => {
+    if (page === "profile" && activePage === "profile") {
+      setSelectedProfileUsername(null)
+    }
+
     setActivePage(page)
+    if (page !== "profile") {
+      setSelectedProfileUsername(null)
+    }
   }
 
   const addColumn = (pageType: PageType) => {
@@ -252,11 +288,46 @@ function App() {
       void loadSearchPage()
       void loadNotificationsPage()
       void loadProfilePage()
+      void loadUserProfilePage()
       void loadCreatePostModal()
     }, 1200)
 
     return () => {
       window.clearTimeout(preloadTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleOpenProfile = (event: Event) => {
+      const customEvent = event as CustomEvent<{ username?: string }>
+      const username = customEvent.detail?.username
+
+      if (!username) {
+        return
+      }
+
+      setSelectedProfileUsername(username)
+      setActivePage("profile")
+    }
+
+    const handleOpenPost = (event: Event) => {
+      const customEvent = event as CustomEvent<{ postId?: string }>
+      const postId = customEvent.detail?.postId
+
+      if (!postId) {
+        return
+      }
+
+      setFocusedPostId(postId)
+      setActivePage("feed")
+    }
+
+    window.addEventListener("app:open-profile", handleOpenProfile as EventListener)
+    window.addEventListener("app:open-post", handleOpenPost as EventListener)
+
+    return () => {
+      window.removeEventListener("app:open-profile", handleOpenProfile as EventListener)
+      window.removeEventListener("app:open-post", handleOpenPost as EventListener)
     }
   }, [])
 
@@ -277,7 +348,7 @@ function App() {
       <SignedOut>
         <div className="min-h-screen bg-slate-50 text-foreground flex flex-col items-center justify-center gap-6">
           <div className="flex flex-col items-center gap-2">
-            <h1 className="text-4xl font-bold mb-4">Threads Clone</h1>
+            <h1 className="text-4xl font-bold mb-4">Paper</h1>
             <p className="text-muted-foreground mb-4">{t("auth.signInPrompt")}</p>
             <div className="flex gap-4">
               <SignInButton mode="modal">
@@ -326,6 +397,9 @@ function App() {
                       pageType={col.pageType}
                       onOpenPost={openPostModal}
                       activeFilter={col.activeFilter}
+                      selectedProfileUsername={selectedProfileUsername}
+                      focusedPostId={focusedPostId}
+                      onFocusedPostHandled={() => setFocusedPostId(null)}
                     />
                   </Suspense>
                 </SubPageContainer>

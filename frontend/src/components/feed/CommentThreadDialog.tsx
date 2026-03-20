@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { Loader2, MessageSquareMore } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Heart, Loader2, MessageSquareMore, Reply } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useApi } from "@/hooks/useApi"
@@ -58,7 +58,10 @@ export function CommentThreadDialog({
   const { apiFetch } = useApi()
   const { language, t } = useI18n()
   const { data: me } = useCurrentUserProfile()
+  const queryClient = useQueryClient()
   const [visibleLimit, setVisibleLimit] = useState(30)
+  const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null)
+  const [replyDraft, setReplyDraft] = useState("")
   const safeLimit = Math.min(COMMENT_LIMIT_MAX, Math.max(COMMENT_LIMIT_MIN, visibleLimit))
 
   const {
@@ -86,6 +89,64 @@ export function CommentThreadDialog({
       safeLimit < COMMENT_LIMIT_MAX &&
       (comments?.length || 0) < post.commentCount
   )
+
+  const toggleCommentLikeMutation = useMutation({
+    mutationFn: async (payload: { commentId: string; isLiked: boolean }) => {
+      const method = payload.isLiked ? "DELETE" : "POST"
+      return apiFetch(`/api/comments/${payload.commentId}/like`, { method })
+    },
+    onSuccess: (_response, payload) => {
+      if (!post?.id) {
+        return
+      }
+
+      queryClient.setQueryData<FeedComment[]>(["comments", "thread", post.id, safeLimit], (previous) => {
+        if (!Array.isArray(previous)) {
+          return previous
+        }
+
+        return previous.map((comment) => {
+          if (comment.id !== payload.commentId) {
+            return comment
+          }
+
+          const nextLikedState = !payload.isLiked
+          const likeDelta = payload.isLiked ? -1 : 1
+
+          return {
+            ...comment,
+            isLikedByMe: nextLikedState,
+            likeCount: Math.max(0, (comment.likeCount || 0) + likeDelta),
+          }
+        })
+      })
+    },
+  })
+
+  const replyMutation = useMutation({
+    mutationFn: async (payload: { parentId: string; content: string }) => {
+      if (!post?.id) {
+        throw new Error("Missing post id")
+      }
+
+      return apiFetch(`/api/comments/post/${post.id}`, {
+        method: "POST",
+        body: JSON.stringify({
+          content: payload.content,
+          parentId: payload.parentId,
+        }),
+      })
+    },
+    onSuccess: async () => {
+      if (!post?.id) {
+        return
+      }
+
+      setReplyDraft("")
+      setReplyingTo(null)
+      await queryClient.invalidateQueries({ queryKey: ["comments", "thread", post.id] })
+    },
+  })
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -147,6 +208,44 @@ export function CommentThreadDialog({
                     <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                       {comment.content}
                     </p>
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const isLiked = Boolean(comment.isLikedByMe)
+                          if (
+                            toggleCommentLikeMutation.isPending &&
+                            toggleCommentLikeMutation.variables?.commentId === comment.id
+                          ) {
+                            return
+                          }
+
+                          toggleCommentLikeMutation.mutate({ commentId: comment.id, isLiked })
+                        }}
+                        className={`inline-flex items-center gap-1 text-xs font-medium transition-colors ${
+                          comment.isLikedByMe
+                            ? "text-rose-600"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Heart size={14} />
+                        <span>{comment.likeCount > 0 ? comment.likeCount : t("post.actions.like")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplyingTo({
+                            id: comment.id,
+                            username: comment.author.username,
+                          })
+                          setReplyDraft("")
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <Reply size={14} />
+                        <span>Reply</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -163,6 +262,54 @@ export function CommentThreadDialog({
               >
                 {t("feed.comments.loadMore")}
               </button>
+            </div>
+          )}
+
+          {replyingTo && (
+            <div className="mt-4 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Replying to @{replyingTo.username}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  value={replyDraft}
+                  onChange={(event) => setReplyDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault()
+                      if (!replyDraft.trim() || replyMutation.isPending) {
+                        return
+                      }
+                      replyMutation.mutate({ parentId: replyingTo.id, content: replyDraft.trim() })
+                    }
+                  }}
+                  placeholder={t("feed.comments.placeholder")}
+                  className="h-9 flex-1 rounded-full border border-border bg-background px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!replyDraft.trim() || replyMutation.isPending) {
+                      return
+                    }
+                    replyMutation.mutate({ parentId: replyingTo.id, content: replyDraft.trim() })
+                  }}
+                  disabled={!replyDraft.trim() || replyMutation.isPending}
+                  className="h-9 rounded-full border-2 border-border bg-card px-4 text-xs font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {replyMutation.isPending ? t("feed.comments.sending") : t("feed.comments.send")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyingTo(null)
+                    setReplyDraft("")
+                  }}
+                  className="h-9 rounded-full border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-muted/50"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>

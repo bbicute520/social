@@ -374,6 +374,41 @@ export function ProfilePage() {
     },
   })
 
+  const deletePostMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      return apiFetch(`/api/posts/${postId}`, {
+        method: "DELETE",
+      })
+    },
+    onSuccess: (_response, postId) => {
+      queryClient.setQueryData<PaginatedResponse<Post> | undefined>(["posts", "user", me?.id], (current) => {
+        if (!current || !Array.isArray(current.data)) {
+          return current
+        }
+
+        return {
+          ...current,
+          data: current.data.filter((post) => post.id !== postId),
+        }
+      })
+
+      queryClient.setQueryData<PaginatedResponse<RepostPost> | undefined>(["posts", "reposts", me?.id], (current) => {
+        if (!current || !Array.isArray(current.data)) {
+          return current
+        }
+
+        return {
+          ...current,
+          data: current.data.filter((post) => post.id !== postId),
+        }
+      })
+
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" })
+      queryClient.invalidateQueries({ queryKey: ["notifications"], refetchType: "inactive" })
+    },
+  })
+
   const followMutation = useMutation({
     mutationFn: async (payload: { userId: string; shouldFollow: boolean }) => {
       return apiFetch(`/api/users/${payload.userId}/follow`, {
@@ -748,6 +783,14 @@ export function ProfilePage() {
               isReposted={isReposted}
               repostDisabled={Boolean(repostDisabled)}
               onToggleRepost={() => repostMutation.mutate({ postId: post.id, isReposted })}
+              canDelete={Boolean(me?.id && post.authorId === me.id)}
+              deleteDisabled={deletePostMutation.isPending && deletePostMutation.variables === post.id}
+              onDelete={() => {
+                if (deletePostMutation.isPending) {
+                  return
+                }
+                deletePostMutation.mutate(post.id)
+              }}
             />
           )
         })}
@@ -826,6 +869,14 @@ export function ProfilePage() {
                 isReposted={isReposted}
                 repostDisabled={Boolean(repostDisabled)}
                 onToggleRepost={() => repostMutation.mutate({ postId: repost.id, isReposted })}
+                canDelete={Boolean(me?.id && repost.authorId === me.id)}
+                deleteDisabled={deletePostMutation.isPending && deletePostMutation.variables === repost.id}
+                onDelete={() => {
+                  if (deletePostMutation.isPending) {
+                    return
+                  }
+                  deletePostMutation.mutate(repost.id)
+                }}
               />
             </div>
           )

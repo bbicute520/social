@@ -66,6 +66,7 @@ export interface Comment {
   createdAt: string
   updatedAt: string
   likeCount: number
+  isLikedByMe?: boolean
   post?: CommentPostPreview
 }
 
